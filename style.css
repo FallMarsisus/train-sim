@@ -21,25 +21,28 @@ nav { background: #34495e; padding: 0 20px; display: flex; box-shadow: 0 2px 5px
 .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px; }
 .subtitle { color: #7f8c8d; margin-top: -10px; margin-bottom: 15px; font-size: 0.9em; }
 
-/* Grille Boutique */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+/* Grille Boutique & Catégories */
+.category-title { margin-top: 20px; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 2px solid #3498db; color: #2c3e50; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; margin-bottom: 30px; }
 .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 15px; text-align: center; display: flex; flex-direction: column; justify-content: space-between; transition: 0.2s; }
 .card:hover { transform: translateY(-3px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 .card img { max-width: 100%; max-height: 60px; object-fit: contain; margin: 0 auto 10px auto; }
 .card h4 { font-size: 0.9em; margin: 0 0 10px 0; color: #2c3e50; height: 35px; overflow: hidden; }
 .card-stats { font-size: 0.8em; color: #7f8c8d; margin-bottom: 10px; }
-.buy-btn { background: #27ae60; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
+.buy-btn { background: #27ae60; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: auto; }
 .buy-btn:hover { background: #2ecc71; }
+.buy-btn:disabled { background: #bdc3c7; cursor: not-allowed; }
 
 /* Layout Inventaire & Atelier */
 .layout-split { display: flex; gap: 20px; }
 .half-panel { flex: 1; }
 
 .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; max-height: 500px; overflow-y: auto; padding-right: 5px; }
-.inv-item { border: 1px solid #bdc3c7; border-radius: 6px; padding: 10px; text-align: center; background: #fff; position: relative; }
+.inv-item { border: 1px solid #bdc3c7; border-radius: 6px; padding: 10px; text-align: center; background: #fff; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
 .inv-item img { max-height: 40px; display: block; margin: 0 auto 5px auto; }
-.inv-item h5 { margin: 0; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-item h5 { margin: 0 0 5px 0; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inv-item button { margin-top: 5px; background: #3498db; color: white; border: none; padding: 4px; width: 100%; border-radius: 3px; cursor: pointer; font-size: 0.8em; }
+.inv-item button:hover { background: #2980b9; }
 
 /* Atelier */
 .comp-list { border: 2px dashed #bdc3c7; border-radius: 6px; padding: 15px; min-height: 100px; background: #fafafa; display: flex; gap: 10px; overflow-x: auto; align-items: center; }

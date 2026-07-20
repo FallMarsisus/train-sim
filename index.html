@@ -32,16 +32,17 @@
 
     <div class="main-container">
 
-        <!-- ONGLET 1 : BOUTIQUE (SÉLECTION ALÉATOIRE) -->
+        <!-- ONGLET 1 : BOUTIQUE -->
         <div id="view-boutique" class="view-section active">
             <div class="panel">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h2>Boutique du jour</h2>
                     <button class="action-btn" onclick="generateShop()">🔄 Renouveler le stock</button>
                 </div>
-                <p style="color: #7f8c8d; margin-top: -15px;">Le matériel disponible change régulièrement. Achetez ce dont vous avez besoin pour votre flotte.</p>
+                <p style="color: #7f8c8d; margin-top: -15px;">Le matériel disponible change régulièrement. (Fret indisponible actuellement).</p>
                 
-                <div id="shop-grid" class="grid">Chargement de la base de données...</div>
+                <!-- Conteneur qui va accueillir les différentes catégories -->
+                <div id="shop-container">Chargement de la base de données...</div>
             </div>
         </div>
 
@@ -71,7 +72,7 @@
                     <div class="stats-box">
                         <div><strong>Valeur :</strong> <span id="comp-cost" style="color:#27ae60;">0 €</span></div>
                         <div><strong>Max :</strong> <span id="comp-speed">0 km/h</span></div>
-                        <div><strong>Capa :</strong> <span id="comp-capacity">0 places</span></div>
+                        <div style="width: 100%;"><strong>Capacité :</strong> <span id="comp-capacity">0 places</span></div>
                         <div><strong>Gabarit :</strong> <span id="comp-gabarit">-</span></div>
                     </div>
 

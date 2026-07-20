@@ -34,13 +34,12 @@ async function initGame() {
         });
 
         // Charger sauvegarde locale si existante
-        const savedData = localStorage.getItem('myTrainEmpireSave');
+        const savedData = localStorage.getItem('myTrainEmpireSavePro');
         if (savedData) {
             let loaded = JSON.parse(savedData);
             gameState.money = loaded.money || 15000000;
             gameState.inventory = loaded.inventory || [];
             gameState.savedRames = loaded.savedRames || [];
-            // Si une boutique était sauvée, on la garde, sinon on regénère
             if (loaded.shopSelection && loaded.shopSelection.length > 0) {
                 shopSelection = loaded.shopSelection;
             } else {
@@ -54,14 +53,16 @@ async function initGame() {
         renderShop();
     } catch (error) {
         console.error(error);
-        document.getElementById('shop-grid').innerHTML = "<p style='color:red;'>Erreur de chargement du JSON.</p>";
+        document.getElementById('shop-container').innerHTML = "<p style='color:red;'>Erreur de chargement du JSON.</p>";
     }
 }
 
-// --- MOTEUR DE PARSING (CORRECTION BUG PLACES) ---
+// --- MOTEUR DE PARSING AVANCÉ ---
 function parseLogicalStats(train) {
     let speed = 90;
-    let capacity = 0;
+    let capacity1 = 0;
+    let capacity2 = 0;
+    let capacityTotal = 0; // Pour les places non classifiées
     let gabarit = "Universel";
 
     if (train.caracteristiques) {
@@ -72,37 +73,51 @@ function parseLogicalStats(train) {
             let speedMatch = text.match(/(\d+)\s*km\/h/);
             if (speedMatch) speed = parseInt(speedMatch[1]);
             
-            // 2. Capacité - Traite les "1ère : 111 // 2nde : 275" ou "1ere : 40"
-            // Explication Regex : Cherche (1ère|2nde|etc) suivi de ":" puis capture les chiffres. /g permet de trouver toutes les occurrences.
-            let classRegex = /(?:1ère|1ere|2nde|2eme|2ème)\s*:\s*(\d+)/gi;
-            let match;
-            let foundClass = false;
-            while ((match = classRegex.exec(text)) !== null) {
-                capacity += parseInt(match[1]);
-                foundClass = true;
+            // 2. Capacité 1ère classe
+            let class1Regex = /(?:1ère|1ere)\s*:\s*(\d+)/gi;
+            let match1;
+            while ((match1 = class1Regex.exec(text)) !== null) {
+                capacity1 += parseInt(match1[1]);
             }
 
-            // Si aucune classe spécifique n'est trouvée, on cherche un format générique "Places : 40" ou "40 places"
-            if (!foundClass) {
+            // 3. Capacité 2nde classe
+            let class2Regex = /(?:2nde|2eme|2ème|2nd)\s*:\s*(\d+)/gi;
+            let match2;
+            while ((match2 = class2Regex.exec(text)) !== null) {
+                capacity2 += parseInt(match2[1]);
+            }
+
+            // 4. Capacité générique (seulement si aucune classe trouvée)
+            if (capacity1 === 0 && capacity2 === 0) {
                 let placesRegex = /(?:places?\s*:\s*(\d+))|(?:(\d+)\s*places?)/gi;
-                while ((match = placesRegex.exec(text)) !== null) {
-                    capacity += parseInt(match[1] || match[2]);
+                let matchGen;
+                while ((matchGen = placesRegex.exec(text)) !== null) {
+                    capacityTotal += parseInt(matchGen[1] || matchGen[2]);
                 }
             }
 
-            // 3. Gabarit
+            // 5. Gabarit
             if (text.includes('britannique')) gabarit = 'Britannique';
             if (text.includes('continental')) gabarit = 'Continental';
         });
     }
 
+    let sumSeats = capacity1 + capacity2 + capacityTotal;
     let baseCost = (train.type === 'loco') ? 300000 : (train.type === 'autorail') ? 600000 : 70000;
-    let finalPrice = Math.round((baseCost * Math.pow(speed/100, 2)) + (capacity * 500));
+    let finalPrice = Math.round((baseCost * Math.pow(speed/100, 2)) + (sumSeats * 500));
     if (finalPrice < 10000) finalPrice = 10000;
 
     let finalImage = (train.image_base64 && train.image_base64.startsWith('data:')) ? train.image_base64 : train.image_url;
 
-    return { speed, capacity, gabarit, logicalPrice: finalPrice, imgResolved: finalImage };
+    return { 
+        speed, 
+        capacity1, 
+        capacity2, 
+        capacityTotal, 
+        gabarit, 
+        logicalPrice: finalPrice, 
+        imgResolved: finalImage 
+    };
 }
 
 // --- GESTION BOUTIQUE & ÉCONOMIE ---
@@ -118,44 +133,68 @@ function getRandomTrains(type, count) {
 }
 
 function generateShop() {
-    // Sélectionne un assortiment aléatoire
-    const locos = getRandomTrains('loco', 3);
-    const autorails = getRandomTrains('autorail', 3);
-    const voyageurs = getRandomTrains('voyageur', 8);
-    const fret = getRandomTrains('fret', 8);
+    // Génère le shop SANS le fret
+    const locos = getRandomTrains('loco', 6);
+    const autorails = getRandomTrains('autorail', 6);
+    const voyageurs = getRandomTrains('voyageur', 12);
     
-    shopSelection = [...locos, ...autorails, ...voyageurs, ...fret];
-    // Mélange visuel de la boutique
-    shopSelection.sort(() => 0.5 - Math.random());
+    shopSelection = [...locos, ...autorails, ...voyageurs];
     
     renderShop();
     saveGame();
 }
 
 function renderShop() {
-    const shopGrid = document.getElementById('shop-grid');
-    shopGrid.innerHTML = '';
+    const shopContainer = document.getElementById('shop-container');
+    shopContainer.innerHTML = '';
 
-    shopSelection.forEach(train => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        const canAfford = gameState.money >= train.logicalPrice;
+    const categories = [
+        { id: 'loco', title: 'Locomotives' },
+        { id: 'autorail', title: 'Rames & Automotrices' },
+        { id: 'voyageur', title: 'Voitures Voyageurs' }
+    ];
+
+    categories.forEach(cat => {
+        const items = shopSelection.filter(t => t.type === cat.id);
+        if (items.length === 0) return;
+
+        const section = document.createElement('div');
+        section.innerHTML = `<h3 class="category-title">${cat.title}</h3>`;
+        const grid = document.createElement('div');
+        grid.className = 'grid';
+
+        items.forEach(train => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            const canAfford = gameState.money >= train.logicalPrice;
+            
+            // Formatage propre des places
+            let placesStr = [];
+            if (train.capacity1 > 0) placesStr.push(`1ère: ${train.capacity1}`);
+            if (train.capacity2 > 0) placesStr.push(`2nde: ${train.capacity2}`);
+            if (train.capacityTotal > 0) placesStr.push(`Std: ${train.capacityTotal}`);
+            if (placesStr.length === 0) placesStr.push('Aucune place');
+
+            card.innerHTML = `
+                <img src="${train.imgResolved}" alt="train">
+                <h4>${train.nom}</h4>
+                <div class="card-stats">
+                    ⚡ ${train.speed} km/h<br>
+                    👥 ${placesStr.join(' | ')}<br>
+                    🔗 ${train.gabarit}<br>
+                    <strong style="color:${canAfford ? '#27ae60' : '#e74c3c'}; font-size:1.1em; display:block; margin-top:5px;">
+                        ${train.logicalPrice.toLocaleString('fr-FR')} €
+                    </strong>
+                </div>
+                <button class="buy-btn" onclick="buyItem('${train.nom.replace(/'/g, "\\'")}')" ${canAfford ? '' : 'disabled'}>
+                    Acheter
+                </button>
+            `;
+            grid.appendChild(card);
+        });
         
-        card.innerHTML = `
-            <img src="${train.imgResolved}" alt="train">
-            <h4>${train.nom}</h4>
-            <div class="card-stats">
-                ⚡ ${train.speed} km/h | 👥 ${train.capacity} pl.<br>
-                🔗 ${train.gabarit}<br>
-                <strong style="color:${canAfford ? '#27ae60' : '#e74c3c'}; font-size:1.1em;">
-                    ${train.logicalPrice.toLocaleString('fr-FR')} €
-                </strong>
-            </div>
-            <button class="buy-btn" onclick="buyItem('${train.nom.replace(/'/g, "\\'")}')" ${canAfford ? '' : 'disabled style="background:#bdc3c7;"'}>
-                Acheter
-            </button>
-        `;
-        shopGrid.appendChild(card);
+        section.appendChild(grid);
+        shopContainer.appendChild(section);
     });
 }
 
@@ -165,16 +204,11 @@ function buyItem(trainName) {
 
     if (gameState.money >= train.logicalPrice) {
         gameState.money -= train.logicalPrice;
-        
-        // On donne un ID unique au composant dans l'inventaire
         let invItem = { ...train, invId: 'inv_' + Date.now() + Math.random() };
         gameState.inventory.push(invItem);
         
         updateMoneyUI();
-        renderShop(); // Met à jour les boutons (grisés si plus d'argent)
-        
-        // Petit feedback visuel
-        alert(`✅ Achat de ${train.nom} réussi ! Le matériel a été livré dans votre Inventaire.`);
+        renderShop();
     }
 }
 
@@ -184,7 +218,7 @@ function updateInventoryUI() {
     grid.innerHTML = '';
 
     if (gameState.inventory.length === 0) {
-        grid.innerHTML = '<p style="color:#7f8c8d; font-size:0.9em;">Inventaire vide. Passez par la boutique !</p>';
+        grid.innerHTML = '<p style="color:#7f8c8d; font-size:0.9em; grid-column:1/-1;">Inventaire vide. Passez par la boutique !</p>';
         return;
     }
 
@@ -194,8 +228,8 @@ function updateInventoryUI() {
         div.innerHTML = `
             <img src="${item.imgResolved}">
             <h5 title="${item.nom}">${item.nom}</h5>
-            <div style="font-size:0.7em; color:#7f8c8d;">${item.type.toUpperCase()}</div>
-            <button onclick="moveToWorkshop('${item.invId}')">🔧 Assembler</button>
+            <div style="font-size:0.7em; color:#7f8c8d; margin-bottom:5px;">${item.type.toUpperCase()}</div>
+            <button onclick="moveToWorkshop('${item.invId}')">🔧 Placer</button>
         `;
         grid.appendChild(div);
     });
@@ -222,7 +256,6 @@ function removeFromWorkshop(invId) {
 }
 
 function clearActiveComposition() {
-    // Ramène tout dans l'inventaire
     gameState.inventory.push(...gameState.activeComposition);
     gameState.activeComposition = [];
     updateInventoryUI();
@@ -247,13 +280,18 @@ function updateCompositionUI() {
         return;
     }
 
-    let totalCost = 0; let totalCapacity = 0; let speeds = []; let gabarits = new Set();
+    let totalCost = 0; 
+    let cap1 = 0; let cap2 = 0; let capTotal = 0; 
+    let speeds = []; let gabarits = new Set();
     let hasMotor = false;
 
     gameState.activeComposition.forEach(item => {
         totalCost += item.logicalPrice;
-        totalCapacity += item.capacity;
+        cap1 += item.capacity1;
+        cap2 += item.capacity2;
+        capTotal += item.capacityTotal;
         speeds.push(item.speed);
+        
         if(item.gabarit !== "Universel") gabarits.add(item.gabarit);
         if (item.type === 'loco' || item.type === 'autorail') hasMotor = true;
 
@@ -269,12 +307,19 @@ function updateCompositionUI() {
 
     document.getElementById('comp-cost').innerText = totalCost.toLocaleString() + " €";
     document.getElementById('comp-speed').innerText = Math.min(...speeds) + " km/h";
-    document.getElementById('comp-capacity').innerText = totalCapacity + " places";
+    
+    // Affichage formaté des places pour l'atelier
+    let placesStr = [];
+    if (cap1 > 0) placesStr.push(`1ère: ${cap1}`);
+    if (cap2 > 0) placesStr.push(`2nde: ${cap2}`);
+    if (capTotal > 0) placesStr.push(`Std: ${capTotal}`);
+    if (placesStr.length === 0) placesStr.push("0 pl.");
+    document.getElementById('comp-capacity').innerText = placesStr.join(' | ');
     
     let mainGabarit = gabarits.size > 0 ? Array.from(gabarits).join(' & ') : "Universel";
     document.getElementById('comp-gabarit').innerText = mainGabarit;
 
-    // VALIDATION
+    // VALIDATION LOGIQUE
     logicBox.style.display = 'block';
     logicBox.className = 'logic-alert'; 
     let canSave = true;
@@ -306,7 +351,7 @@ function saveActiveRame() {
     const nouvelleRame = {
         id: 'rame_' + Date.now(),
         nom: name,
-        elements: [...gameState.activeComposition], // On clone le tableau
+        elements: [...gameState.activeComposition], 
         stats: {
             cout: document.getElementById('comp-cost').innerText,
             vitesse: document.getElementById('comp-speed').innerText,
@@ -315,7 +360,7 @@ function saveActiveRame() {
     };
 
     gameState.savedRames.push(nouvelleRame);
-    gameState.activeComposition = []; // On vide l'atelier
+    gameState.activeComposition = []; 
     
     saveGame();
     updateInventoryUI();
@@ -328,7 +373,6 @@ function disassembleRame(id) {
         const index = gameState.savedRames.findIndex(r => r.id === id);
         if (index > -1) {
             const rame = gameState.savedRames.splice(index, 1)[0];
-            // Rendre les éléments à l'inventaire
             gameState.inventory.push(...rame.elements);
             
             saveGame();
@@ -358,7 +402,7 @@ function renderSavedRames() {
                 <button onclick="disassembleRame('${rame.id}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Démanteler</button>
             </div>
             <div style="font-size: 0.9em; margin-bottom: 10px; color: #7f8c8d;">
-                Val: ${rame.stats.cout} | Max: ${rame.stats.vitesse} | Capa: ${rame.stats.places}
+                Val: ${rame.stats.cout} | Max: ${rame.stats.vitesse} | 👥 ${rame.stats.places}
             </div>
             <div class="rame-visualizer">
                 ${visualHtml}
@@ -370,18 +414,17 @@ function renderSavedRames() {
 
 // --- SYSTÈME DE SAUVEGARDE GLOBALE ---
 function saveGame() {
-    // Sauvegarde l'état complet dans le localStorage
     let stateToSave = {
         money: gameState.money,
         inventory: gameState.inventory,
         savedRames: gameState.savedRames,
         shopSelection: shopSelection
     };
-    localStorage.setItem('myTrainEmpireSave', JSON.stringify(stateToSave));
+    localStorage.setItem('myTrainEmpireSavePro', JSON.stringify(stateToSave));
 }
 
 function exportGameData() {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(localStorage.getItem('myTrainEmpireSave'));
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(localStorage.getItem('myTrainEmpireSavePro'));
     const dlAnchor = document.createElement('a');
     dlAnchor.setAttribute("href", dataStr);
     dlAnchor.setAttribute("download", "train_empire_save.json");
@@ -394,8 +437,8 @@ function importGameData(event) {
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
-            localStorage.setItem('myTrainEmpireSave', e.target.result);
-            location.reload(); // On rafraîchit la page pour tout recharger proprement
+            localStorage.setItem('myTrainEmpireSavePro', e.target.result);
+            location.reload(); 
         } catch(err) { alert("Fichier invalide."); }
     };
     reader.readAsText(file);
