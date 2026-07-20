@@ -186,3 +186,148 @@ nav { background: #1b3346; padding: 0 20px; display: flex; box-shadow: 0 2px 5px
 .legend-route {
     border-color: #e74c3c;
 }
+
+/* --- Refonte UI style métro épuré --- */
+:root {
+    --metro-bg: #f3f5f7;
+    --metro-surface: #ffffff;
+    --metro-surface-soft: #f8fafb;
+    --metro-border: #d8e0e7;
+    --metro-text: #13212d;
+    --metro-muted: #607082;
+    --metro-accent: #1368b5;
+    --metro-accent-strong: #0f4f87;
+    --metro-success: #138a57;
+    --metro-danger: #c44141;
+}
+
+body {
+    background: var(--metro-bg);
+    color: var(--metro-text);
+    font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+header {
+    background: #0f1d2b;
+    border-bottom: 2px solid #1b4f7a;
+}
+
+.header-finances {
+    background: #16283a;
+    border-color: #28435c;
+}
+
+.header-actions button,
+.action-btn,
+.buy-btn,
+.inv-item button {
+    border-radius: 8px;
+}
+
+.header-actions button,
+.action-btn {
+    background: var(--metro-accent);
+    border: 1px solid var(--metro-accent);
+    color: #fff;
+}
+
+.header-actions button:hover,
+.action-btn:hover {
+    background: var(--metro-accent-strong);
+    border-color: var(--metro-accent-strong);
+}
+
+.action-btn.success,
+.buy-btn {
+    background: var(--metro-success);
+    border-color: var(--metro-success);
+}
+
+.action-btn.cancel,
+.remove-btn {
+    background: var(--metro-danger);
+}
+
+nav {
+    background: #152638;
+    border-bottom: 1px solid #20384f;
+}
+
+.tab-btn {
+    color: #d6e0e8;
+    border-bottom-width: 2px;
+}
+
+.tab-btn:hover,
+.tab-btn.active {
+    background: #1c3348;
+}
+
+.tab-btn.active {
+    color: #ffffff;
+    border-bottom-color: #59a4e8;
+}
+
+.panel,
+.saved-rame,
+.card,
+.inv-item,
+.comp-item {
+    background: var(--metro-surface);
+    border: 1px solid var(--metro-border);
+    box-shadow: 0 4px 16px rgba(9, 31, 53, 0.06);
+}
+
+.subtitle,
+.card-stats,
+.small-hint,
+.station-choice-line,
+.coupler {
+    color: var(--metro-muted);
+}
+
+.category-title {
+    border-bottom-color: #59a4e8;
+}
+
+.map-form-card,
+.intermediate-stops-box,
+.stats-box,
+.rame-visualizer {
+    background: var(--metro-surface-soft);
+    border: 1px solid var(--metro-border);
+}
+
+.field-input {
+    border-color: #c5d1dc;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.field-input:focus {
+    outline: 2px solid rgba(19, 104, 181, 0.2);
+    border-color: var(--metro-accent);
+}
+
+.map-legend {
+    border-color: var(--metro-border);
+    box-shadow: 0 3px 12px rgba(13, 29, 45, 0.12);
+}
+
+.map-panel #map {
+    border-radius: 0;
+}
+
+@media (max-width: 1024px) {
+    .layout-split {
+        flex-direction: column;
+    }
+
+    .map-control-panel {
+        flex: 1 1 auto;
+    }
+
+    .map-panel #map {
+        height: 460px !important;
+    }
+}
