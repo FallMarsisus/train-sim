@@ -11,6 +11,10 @@ let gameState = {
     activeRoutes: []
 };
 
+const ETA_DWELL_TIME_SEC = 45;
+const ETA_ACCELERATION_MS2 = 0.55;
+const ETA_DECELERATION_MS2 = 0.65;
+
 // --- GESTION DES ONGLETS ---
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -24,7 +28,10 @@ function switchTab(tabId) {
     if (tabId === 'carte') {
         initMap();
         populateRameSelect();
+        populateStationSelect();
         renderActiveRoutes();
+        refreshRouteMapLayers();
+        updateTrainMarkers();
         setTimeout(() => map && map.invalidateSize(), 150);
     }
 }
@@ -46,8 +53,18 @@ async function initGame() {
             let loaded = JSON.parse(savedData);
             gameState.money = loaded.money || 15000000;
             gameState.inventory = loaded.inventory || [];
-            gameState.savedRames = loaded.savedRames || [];
-            gameState.activeRoutes = loaded.activeRoutes || [];
+            gameState.savedRames = (loaded.savedRames || []).map(rame => ({
+                ...rame,
+                currentStationId: rame.currentStationId || null,
+                currentStationNom: rame.currentStationNom || null
+            }));
+            gameState.activeRoutes = (loaded.activeRoutes || []).map(route => ({
+                ...route,
+                id: route.id || `route_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+                progress: Number.isFinite(route.progress) ? route.progress : 0,
+                startedAtMs: route.startedAtMs || Date.now(),
+                totalDurationSec: route.totalDurationSec || Math.max(60, ((route.distance || 10) / 100) * 3600)
+            }));
             if (loaded.shopSelection && loaded.shopSelection.length > 0) {
                 shopSelection = loaded.shopSelection;
             } else {
@@ -418,9 +435,36 @@ function populateRameSelect() {
     gameState.savedRames.forEach(rame => {
         const opt = document.createElement('option');
         opt.value = rame.id;
-        opt.textContent = rame.nom;
+        const location = rame.currentStationNom ? ` • ${rame.currentStationNom}` : ' • non positionnée';
+        opt.textContent = `${rame.nom}${location}`;
         select.appendChild(opt);
     });
+
+    if (!select.dataset.bound) {
+        select.addEventListener('change', syncRameOriginFromSelection);
+        select.dataset.bound = '1';
+    }
+}
+
+function populateStationSelect() {
+    const stationSelect = document.getElementById('select-rame-origin');
+    if (!stationSelect) return;
+    stationSelect.innerHTML = '<option value="">-- Choisissez la gare actuelle de la rame --</option>';
+    sncfStations.forEach(station => {
+        const opt = document.createElement('option');
+        opt.value = String(station.id);
+        opt.textContent = station.nom;
+        stationSelect.appendChild(opt);
+    });
+}
+
+function syncRameOriginFromSelection() {
+    const rameId = document.getElementById('select-rame')?.value;
+    const stationSelect = document.getElementById('select-rame-origin');
+    if (!rameId || !stationSelect) return;
+    const rame = gameState.savedRames.find(r => r.id === rameId);
+    if (!rame) return;
+    stationSelect.value = rame.currentStationId ? String(rame.currentStationId) : '';
 }
 
 function renderActiveRoutes() {
@@ -433,14 +477,33 @@ function renderActiveRoutes() {
     }
 
     container.innerHTML = gameState.activeRoutes.map(route => `
-        <div style="background:#f8f9fa; border:1px solid #ddd; border-radius:6px; padding:10px; margin-bottom:10px;">
-            <strong>${route.rameNom}</strong><br>
-            ${route.departNom} → ${route.arriveeNom}<br>
-            ${(route.intermediateStops && route.intermediateStops.length) ? `Arrêts: ${route.intermediateStops.join(' • ')}<br>` : ''}
-            ${route.heureDepart} - ${route.heureArrivee}<br>
-            ${route.distance} km
+        <div class="route-card">
+            <div class="route-card-header">
+                <strong>${route.rameNom}</strong>
+                <button class="route-delete-btn" onclick="deleteRoute('${route.id}')">Supprimer</button>
+            </div>
+            <div>${route.departNom} → ${route.arriveeNom}</div>
+            ${(route.intermediateStops && route.intermediateStops.length) ? `<div class="route-meta">Arrêts: ${route.intermediateStops.join(' • ')}</div>` : ''}
+            <div class="route-meta">${route.heureDepart} - ${route.heureArrivee} • ${route.distance} km</div>
+            ${route.progress != null ? `<div class="route-meta">Progression: ${(route.progress * 100).toFixed(0)}%</div>` : ''}
+            ${route.statusText ? `<div class="route-meta">${route.statusText}</div>` : ''}
         </div>
     `).join('');
+}
+
+function deleteRoute(routeId) {
+    const route = gameState.activeRoutes.find(r => r.id === routeId);
+    if (!route) return;
+    if (!confirm(`Supprimer le trajet ${route.departNom} → ${route.arriveeNom} ?`)) return;
+    gameState.activeRoutes = gameState.activeRoutes.filter(r => r.id !== routeId);
+    if (trainMarkers.has(routeId)) {
+        trainsLayer.removeLayer(trainMarkers.get(routeId));
+        trainMarkers.delete(routeId);
+    }
+    saveGame();
+    renderActiveRoutes();
+    refreshRouteMapLayers();
+    setRouteFeedback('Trajet supprimé.', 'success');
 }
 
 // --- SYSTÈME DE SAUVEGARDE GLOBALE ---
@@ -479,7 +542,7 @@ function importGameData(event) {
 window.onload = initGame;
 
 // --- CARTE & ROUTAGE ---
-let map = null, markersLayer = null, routesLayer = null, networkLayer = null;
+let map = null, markersLayer = null, routesLayer = null, networkLayer = null, trainsLayer = null;
 let sncfStations = [];
 let selectedDepart = null, selectedArrivee = null;
 let networkFeatures = [];
@@ -499,6 +562,8 @@ const ROUTE_GRAPH_MAX_VISITED = 5000;
 let stationById = new Map();
 let stationGraph = new Map();
 let routeGraphReady = false;
+let routeSimulationTimer = null;
+let trainMarkers = new Map();
 
 function initMap() {
     if (typeof L === 'undefined') {
@@ -521,11 +586,13 @@ function initMap() {
     networkLayer = L.layerGroup().addTo(map);
     routesLayer = L.layerGroup().addTo(map);
     markersLayer = L.layerGroup().addTo(map);
+    trainsLayer = L.layerGroup().addTo(map);
 
     map.on('moveend zoomend', scheduleViewportRender);
     
     fetchGaresLocales();
     fetchLignesLocales();
+    startRouteSimulation();
 }
 
 async function fetchGaresLocales() {
@@ -547,6 +614,8 @@ async function fetchGaresLocales() {
         routeGraphReady = false;
         maybeBuildRouteGraph();
         scheduleViewportRender();
+        populateStationSelect();
+        populateRameSelect();
     } catch (e) { console.error("Erreur gares:", e); }
 }
 
@@ -1056,16 +1125,104 @@ function buildRouteStations(depart, selectedStops, arrivee) {
     return unique;
 }
 
+function parseRameSpeedKmh(rame) {
+    const speed = parseInt(String(rame?.stats?.vitesse || '').match(/\d+/)?.[0], 10);
+    return Number.isFinite(speed) && speed > 0 ? speed : 80;
+}
+
+function setRouteFeedback(message, type = 'error') {
+    const box = document.getElementById('route-feedback');
+    if (!box) return;
+    if (!message) {
+        box.className = 'route-feedback';
+        box.innerText = '';
+        return;
+    }
+    box.className = `route-feedback ${type}`;
+    box.innerText = message;
+}
+
+function showToast(message, type = '') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`.trim();
+    toast.innerText = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.remove();
+    }, 3600);
+}
+
+function calculateSegmentTravelTimeSec(distanceKm, speedKmh) {
+    const distanceM = Math.max(0, distanceKm * 1000);
+    const maxSpeedMs = Math.max(1, speedKmh / 3.6);
+    const accelTime = maxSpeedMs / ETA_ACCELERATION_MS2;
+    const decelTime = maxSpeedMs / ETA_DECELERATION_MS2;
+    const accelDistance = 0.5 * ETA_ACCELERATION_MS2 * accelTime * accelTime;
+    const decelDistance = 0.5 * ETA_DECELERATION_MS2 * decelTime * decelTime;
+    const fullProfileDistance = accelDistance + decelDistance;
+
+    if (distanceM <= fullProfileDistance) {
+        const peakSpeed = Math.sqrt((2 * distanceM * ETA_ACCELERATION_MS2 * ETA_DECELERATION_MS2) / (ETA_ACCELERATION_MS2 + ETA_DECELERATION_MS2));
+        return (peakSpeed / ETA_ACCELERATION_MS2) + (peakSpeed / ETA_DECELERATION_MS2);
+    }
+
+    const cruiseDistance = distanceM - fullProfileDistance;
+    return accelTime + decelTime + (cruiseDistance / maxSpeedMs);
+}
+
+function computeRouteTiming(routeStations, speedKmh) {
+    const segmentDurationsSec = [];
+    const segmentDistancesKm = [];
+    for (let i = 1; i < routeStations.length; i++) {
+        const from = routeStations[i - 1];
+        const to = routeStations[i];
+        const segmentDistanceKm = approxKmDistance(from.lat, from.lon, to.lat, to.lon);
+        const segmentTimeSec = calculateSegmentTravelTimeSec(segmentDistanceKm, speedKmh);
+        segmentDistancesKm.push(segmentDistanceKm);
+        segmentDurationsSec.push(segmentTimeSec);
+    }
+
+    const dwellCount = Math.max(0, routeStations.length - 2);
+    const dwellTimeSec = dwellCount * ETA_DWELL_TIME_SEC;
+    const movingTimeSec = segmentDurationsSec.reduce((acc, duration) => acc + duration, 0);
+    const totalTimeSec = movingTimeSec + dwellTimeSec;
+    const totalDistanceKm = segmentDistancesKm.reduce((acc, distance) => acc + distance, 0);
+
+    return { segmentDurationsSec, segmentDistancesKm, movingTimeSec, dwellTimeSec, totalTimeSec, totalDistanceKm };
+}
+
+function getStationById(stationId) {
+    return stationById.get(String(stationId)) || null;
+}
+
 async function planifierTrajet() {
     const rameId = document.getElementById('select-rame').value;
     const time = document.getElementById('time-depart').value;
+    const rameOriginId = document.getElementById('select-rame-origin').value;
 
-    if (!rameId || !selectedDepart || !selectedArrivee || !time) {
-        return alert("Veuillez remplir tous les champs !");
+    setRouteFeedback('');
+
+    if (!rameId || !selectedDepart || !selectedArrivee || !time || !rameOriginId) {
+        setRouteFeedback("Veuillez sélectionner la rame, sa gare de départ, les gares départ/arrivée et l'heure.");
+        return;
     }
 
     const rame = gameState.savedRames.find(r => r.id == rameId);
-    if (!rame) return;
+    if (!rame) return setRouteFeedback("Rame introuvable.");
+    if (gameState.activeRoutes.some(route => route.rameId === rame.id)) {
+        return setRouteFeedback(`La rame ${rame.nom} est déjà en circulation.`);
+    }
+    const rameOriginStation = getStationById(rameOriginId);
+    if (!rameOriginStation) return setRouteFeedback("Gare de rame invalide.");
+
+    if (String(selectedDepart.id) !== String(rameOriginStation.id)) {
+        return setRouteFeedback(`Départ incohérent: départ choisi ${selectedDepart.nom}, mais rame embarquée à ${rameOriginStation.nom}.`);
+    }
+    if (rame.currentStationId && String(rame.currentStationId) !== String(rameOriginStation.id)) {
+        return setRouteFeedback(`Rame ${rame.nom} actuellement à ${rame.currentStationNom}, impossible de partir depuis ${rameOriginStation.nom}.`);
+    }
 
     let selectedStops = getSelectedIntermediateStops();
     if (selectedStops.length === 0) {
@@ -1082,41 +1239,197 @@ async function planifierTrajet() {
         const routeFeature = geo?.features?.[0];
         if (!routeFeature?.geometry?.coordinates?.length) throw new Error('Aucun tracé valide');
 
-        const dist = routeFeature?.properties?.['track-length'] / 1000;
-        if (!Number.isFinite(dist) || dist <= 0) throw new Error('Distance invalide');
-        const speedKmh = parseInt(rame.stats.vitesse) * 0.85;
-        const timeSec = (dist / speedKmh) * 3600;
+        const speedKmh = parseRameSpeedKmh(rame) * 0.85;
+        const timing = computeRouteTiming(routeStations, speedKmh);
+        if (!Number.isFinite(timing.totalDistanceKm) || timing.totalDistanceKm <= 0) throw new Error('Distance invalide');
         
         const departDate = new Date(`1970-01-01T${time}:00`);
-        const arriveeDate = new Date(departDate.getTime() + (timeSec * 1000));
+        const arriveeDate = new Date(departDate.getTime() + (timing.totalTimeSec * 1000));
         const timeArrivee = arriveeDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
         
         const path = routeFeature.geometry.coordinates.map(c => [c[1], c[0]]);
+        const routeId = `route_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        rame.currentStationId = String(rameOriginStation.id);
+        rame.currentStationNom = rameOriginStation.nom;
         
         gameState.activeRoutes.push({
+            id: routeId,
+            rameId: rame.id,
             rameNom: rame.nom,
             departNom: selectedDepart.nom,
             arriveeNom: selectedArrivee.nom,
+            departId: String(selectedDepart.id),
+            arriveeId: String(selectedArrivee.id),
             heureDepart: time,
             heureArrivee: timeArrivee,
-            distance: Math.round(dist),
+            distance: Math.round(timing.totalDistanceKm),
+            routeStations: routeStations.map(station => ({
+                id: String(station.id),
+                nom: station.nom,
+                lat: station.lat,
+                lon: station.lon
+            })),
+            segmentDurationsSec: timing.segmentDurationsSec,
+            segmentDistancesKm: timing.segmentDistancesKm,
+            dwellTimeSec: ETA_DWELL_TIME_SEC,
+            totalDurationSec: timing.totalTimeSec,
+            startedAtMs: Date.now(),
+            progress: 0,
+            statusText: `Prêt au départ depuis ${selectedDepart.nom}`,
             intermediateStops: selectedStops.map(station => station.nom),
             path: path
         });
         
         saveGame();
-        
-        routesLayer.clearLayers();
-        L.polyline(path, {color: '#e74c3c', weight: 4}).addTo(routesLayer);
+        setRouteFeedback(`Trajet validé. ETA ${timeArrivee} (${Math.round(timing.totalTimeSec / 60)} min).`, 'success');
+        showToast(`🚆 ${rame.nom} en circulation vers ${selectedArrivee.nom}.`, 'success');
         
         selectedDepart = null; selectedArrivee = null;
         document.getElementById('lbl-depart').innerText = "Cliquez sur une gare";
         document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
+        document.getElementById('lbl-depart').style.color = '#e74c3c';
+        document.getElementById('lbl-arrivee').style.color = '#e74c3c';
         resetIntermediateSelections();
         
+        refreshRouteMapLayers();
+        updateTrainMarkers();
+        startRouteSimulation();
+        populateRameSelect();
+        syncRameOriginFromSelection();
         renderActiveRoutes();
         
     } catch (e) {
-        alert("Erreur de routage. Essayez un autre trajet.");
+        setRouteFeedback("Erreur de routage. Essayez un autre trajet.");
     }
+}
+
+function getPathPoint(path, progress) {
+    if (!Array.isArray(path) || path.length === 0) return null;
+    if (path.length === 1) return path[0];
+    const bounded = Math.min(1, Math.max(0, progress));
+    const scaled = bounded * (path.length - 1);
+    const lower = Math.floor(scaled);
+    const upper = Math.min(path.length - 1, lower + 1);
+    const ratio = scaled - lower;
+    const start = path[lower];
+    const end = path[upper];
+    if (!start || !end) return start || end || null;
+    return [
+        start[0] + (end[0] - start[0]) * ratio,
+        start[1] + (end[1] - start[1]) * ratio
+    ];
+}
+
+function computeRouteStatus(route, elapsedSec) {
+    if (!Array.isArray(route.routeStations) || route.routeStations.length < 2 || !Array.isArray(route.segmentDurationsSec)) {
+        return route.statusText || '';
+    }
+
+    let remaining = elapsedSec;
+    for (let i = 0; i < route.segmentDurationsSec.length; i++) {
+        const segmentTime = route.segmentDurationsSec[i];
+        if (remaining <= segmentTime) {
+            const from = route.routeStations[i]?.nom || route.departNom;
+            const to = route.routeStations[i + 1]?.nom || route.arriveeNom;
+            return `En trajet: ${from} → ${to}`;
+        }
+        remaining -= segmentTime;
+        const isIntermediateStop = i < route.segmentDurationsSec.length - 1;
+        if (isIntermediateStop) {
+            if (remaining <= ETA_DWELL_TIME_SEC) {
+                const station = route.routeStations[i + 1]?.nom || '';
+                return `Arrêt en gare: ${station}`;
+            }
+            remaining -= ETA_DWELL_TIME_SEC;
+        }
+    }
+    return `Arrivée imminente: ${route.arriveeNom}`;
+}
+
+function finalizeRoute(route) {
+    const rame = gameState.savedRames.find(r => r.id === route.rameId);
+    if (rame) {
+        rame.currentStationId = route.arriveeId || null;
+        rame.currentStationNom = route.arriveeNom || null;
+    }
+    if (trainMarkers.has(route.id)) {
+        trainsLayer.removeLayer(trainMarkers.get(route.id));
+        trainMarkers.delete(route.id);
+    }
+    showToast(`✅ ${route.rameNom} est arrivée à ${route.arriveeNom}.`, 'success');
+}
+
+function updateRouteSimulation() {
+    if (!gameState.activeRoutes.length) {
+        updateTrainMarkers();
+        return;
+    }
+    const now = Date.now();
+    const completedIds = [];
+
+    gameState.activeRoutes.forEach(route => {
+        if (!route.startedAtMs || !route.totalDurationSec) return;
+        const elapsedSec = Math.max(0, (now - route.startedAtMs) / 1000);
+        const total = Math.max(1, route.totalDurationSec);
+        route.progress = Math.min(1, elapsedSec / total);
+        route.statusText = computeRouteStatus(route, elapsedSec);
+        if (route.progress >= 1) completedIds.push(route.id);
+    });
+
+    if (completedIds.length) {
+        const completedRoutes = gameState.activeRoutes.filter(route => completedIds.includes(route.id));
+        completedRoutes.forEach(finalizeRoute);
+        gameState.activeRoutes = gameState.activeRoutes.filter(route => !completedIds.includes(route.id));
+        populateRameSelect();
+        syncRameOriginFromSelection();
+    }
+
+    saveGame();
+    renderActiveRoutes();
+    refreshRouteMapLayers();
+    updateTrainMarkers();
+}
+
+function startRouteSimulation() {
+    if (routeSimulationTimer) return;
+    routeSimulationTimer = setInterval(updateRouteSimulation, 1000);
+}
+
+function refreshRouteMapLayers() {
+    if (!routesLayer || !map) return;
+    routesLayer.clearLayers();
+    gameState.activeRoutes.forEach(route => {
+        if (!Array.isArray(route.path) || route.path.length < 2) return;
+        L.polyline(route.path, { color: '#e74c3c', weight: 4, opacity: 0.85 }).addTo(routesLayer);
+    });
+}
+
+function updateTrainMarkers() {
+    if (!trainsLayer || !map) return;
+    const activeIds = new Set();
+    gameState.activeRoutes.forEach(route => {
+        if (!Array.isArray(route.path) || !route.path.length) return;
+        const progress = Number.isFinite(route.progress) ? route.progress : 0;
+        const point = getPathPoint(route.path, progress);
+        if (!point) return;
+        activeIds.add(route.id);
+
+        let marker = trainMarkers.get(route.id);
+        if (!marker) {
+            marker = L.marker(point, {
+                icon: L.divIcon({ html: '🚆', className: 'train-icon', iconSize: [18, 18] })
+            }).addTo(trainsLayer);
+            trainMarkers.set(route.id, marker);
+        } else {
+            marker.setLatLng(point);
+        }
+        marker.bindTooltip(`${route.rameNom} — ${route.statusText || 'En circulation'}`);
+    });
+
+    trainMarkers.forEach((marker, routeId) => {
+        if (activeIds.has(routeId)) return;
+        trainsLayer.removeLayer(marker);
+        trainMarkers.delete(routeId);
+    });
 }
