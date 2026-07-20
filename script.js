@@ -490,6 +490,15 @@ let lastViewportKey = '';
 let routePreviewCache = null;
 let intermediateStationSuggestions = [];
 const lineRenderer = (typeof L !== 'undefined' && typeof L.canvas === 'function') ? L.canvas({ padding: 0.2 }) : null;
+const STATION_MARKER_MIN_ZOOM = 8;
+const ROUTE_MAX_INTERMEDIATE_STOPS = 10;
+const ROUTE_GRAPH_SNAP_DISTANCE_KM = 5;
+const ROUTE_GRAPH_TRANSFER_DISTANCE_KM = 1.2;
+const ROUTE_GRAPH_BUCKET_SIZE_DEG = 0.1;
+const ROUTE_GRAPH_MAX_VISITED = 5000;
+let stationById = new Map();
+let stationGraph = new Map();
+let routeGraphReady = false;
 
 function initMap() {
     if (typeof L === 'undefined') {
@@ -534,6 +543,9 @@ async function fetchGaresLocales() {
                 sncfStations.push({ id: gare.id || `station_${index}`, nom, lat, lon });
             }
         });
+        stationById = new Map(sncfStations.map(station => [String(station.id), station]));
+        routeGraphReady = false;
+        maybeBuildRouteGraph();
         scheduleViewportRender();
     } catch (e) { console.error("Erreur gares:", e); }
 }
@@ -553,14 +565,16 @@ async function fetchLignesLocales() {
             };
         });
 
+        routeGraphReady = false;
+        maybeBuildRouteGraph();
         scheduleViewportRender();
         
     } catch (e) { console.error("Erreur lignes:", e); }
 }
 
-function handleStationClick(nom, lat, lon) {
+function handleStationClick(id, nom, lat, lon) {
     if (!selectedDepart || (selectedDepart && selectedArrivee)) { 
-        selectedDepart = { nom, lat, lon };
+        selectedDepart = { id: String(id), nom, lat, lon };
         selectedArrivee = null;
         document.getElementById('lbl-depart').innerText = nom;
         document.getElementById('lbl-depart').style.color = '#27ae60';
@@ -568,7 +582,7 @@ function handleStationClick(nom, lat, lon) {
         document.getElementById('lbl-arrivee').style.color = '#e74c3c';
         resetIntermediateSelections();
     } else { 
-        selectedArrivee = { nom, lat, lon };
+        selectedArrivee = { id: String(id), nom, lat, lon };
         document.getElementById('lbl-arrivee').innerText = nom;
         document.getElementById('lbl-arrivee').style.color = '#27ae60';
         prepareIntermediateSuggestions();
@@ -630,7 +644,7 @@ function renderVisibleMapData() {
     lastViewportKey = viewportKey;
 
     renderVisibleLines(bounds);
-    renderVisibleStations(bounds);
+    renderVisibleStations(bounds, zoom);
 }
 
 function renderVisibleLines(bounds) {
@@ -658,7 +672,17 @@ function renderVisibleLines(bounds) {
     });
 }
 
-function renderVisibleStations(bounds) {
+function clearVisibleStationMarkers() {
+    visibleStationMarkers.forEach(marker => markersLayer.removeLayer(marker));
+    visibleStationMarkers.clear();
+}
+
+function renderVisibleStations(bounds, zoom) {
+    if (zoom < STATION_MARKER_MIN_ZOOM) {
+        clearVisibleStationMarkers();
+        return;
+    }
+
     const visibleIds = new Set();
 
     sncfStations.forEach(station => {
@@ -671,7 +695,7 @@ function renderVisibleStations(bounds) {
         }).addTo(markersLayer);
 
         marker.bindTooltip(station.nom);
-        marker.on('click', () => handleStationClick(station.nom, station.lat, station.lon));
+        marker.on('click', () => handleStationClick(station.id, station.nom, station.lat, station.lon));
         visibleStationMarkers.set(station.id, marker);
     });
 
@@ -686,6 +710,187 @@ function resetIntermediateSelections() {
     routePreviewCache = null;
     intermediateStationSuggestions = [];
     renderIntermediateSuggestions();
+}
+
+function maybeBuildRouteGraph() {
+    if (routeGraphReady) return;
+    if (!sncfStations.length || !networkFeatures.length) return;
+    stationGraph = buildStationGraph(sncfStations, networkFeatures);
+    routeGraphReady = true;
+}
+
+function buildStationGraph(stations, features) {
+    const graph = new Map();
+    const stationBuckets = new Map();
+
+    const bucketKey = (lat, lon) => `${Math.floor(lat / ROUTE_GRAPH_BUCKET_SIZE_DEG)}:${Math.floor(lon / ROUTE_GRAPH_BUCKET_SIZE_DEG)}`;
+    stations.forEach(station => {
+        graph.set(String(station.id), new Map());
+        const key = bucketKey(station.lat, station.lon);
+        if (!stationBuckets.has(key)) stationBuckets.set(key, []);
+        stationBuckets.get(key).push(station);
+    });
+
+    const getNearbyStations = (lat, lon, maxDistanceKm) => {
+        const baseLat = Math.floor(lat / ROUTE_GRAPH_BUCKET_SIZE_DEG);
+        const baseLon = Math.floor(lon / ROUTE_GRAPH_BUCKET_SIZE_DEG);
+        const candidates = [];
+
+        for (let dLat = -1; dLat <= 1; dLat++) {
+            for (let dLon = -1; dLon <= 1; dLon++) {
+                const bucket = stationBuckets.get(`${baseLat + dLat}:${baseLon + dLon}`);
+                if (!bucket) continue;
+                bucket.forEach(station => {
+                    const distance = approxKmDistance(lat, lon, station.lat, station.lon);
+                    if (distance <= maxDistanceKm) candidates.push({ id: String(station.id), distance });
+                });
+            }
+        }
+
+        candidates.sort((a, b) => a.distance - b.distance);
+        return candidates;
+    };
+
+    const addEdge = (fromId, toId, weight) => {
+        if (fromId === toId) return;
+        const fromEdges = graph.get(fromId);
+        const toEdges = graph.get(toId);
+        if (!fromEdges || !toEdges) return;
+
+        const existingForward = fromEdges.get(toId);
+        const existingBackward = toEdges.get(fromId);
+        if (existingForward == null || weight < existingForward) fromEdges.set(toId, weight);
+        if (existingBackward == null || weight < existingBackward) toEdges.set(fromId, weight);
+    };
+
+    features.forEach(feature => {
+        const coords = feature.coordinates || [];
+        if (coords.length < 2) return;
+
+        const step = coords.length > 1000 ? Math.floor(coords.length / 1000) : 1;
+        const sequence = [];
+        let previousId = null;
+
+        for (let i = 0; i < coords.length; i += step) {
+            const [lon, lat] = coords[i];
+            const nearest = getNearbyStations(lat, lon, ROUTE_GRAPH_SNAP_DISTANCE_KM)[0];
+            if (!nearest) continue;
+            if (nearest.id === previousId) continue;
+            sequence.push(nearest.id);
+            previousId = nearest.id;
+        }
+
+        const [lastLon, lastLat] = coords[coords.length - 1];
+        const lastNearest = getNearbyStations(lastLat, lastLon, ROUTE_GRAPH_SNAP_DISTANCE_KM)[0];
+        if (lastNearest && sequence[sequence.length - 1] !== lastNearest.id) {
+            sequence.push(lastNearest.id);
+        }
+
+        for (let i = 1; i < sequence.length; i++) {
+            const fromId = sequence[i - 1];
+            const toId = sequence[i];
+            if (fromId === toId) continue;
+            const fromStation = stationById.get(fromId);
+            const toStation = stationById.get(toId);
+            if (!fromStation || !toStation) continue;
+            const distance = approxKmDistance(fromStation.lat, fromStation.lon, toStation.lat, toStation.lon);
+            if (distance > 0 && Number.isFinite(distance)) addEdge(fromId, toId, distance);
+        }
+    });
+
+    const byName = new Map();
+    stations.forEach(station => {
+        const key = String(station.nom || '').trim().toLowerCase();
+        if (!key) return;
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push(station);
+    });
+
+    byName.forEach(list => {
+        if (list.length < 2) return;
+        for (let i = 0; i < list.length; i++) {
+            for (let j = i + 1; j < list.length; j++) {
+                const first = list[i];
+                const second = list[j];
+                const distance = approxKmDistance(first.lat, first.lon, second.lat, second.lon);
+                if (distance <= ROUTE_GRAPH_TRANSFER_DISTANCE_KM) {
+                    addEdge(String(first.id), String(second.id), Math.max(0.2, distance));
+                }
+            }
+        }
+    });
+
+    return graph;
+}
+
+function findShortestStationPath(startId, endId) {
+    const start = String(startId);
+    const end = String(endId);
+    if (!start || !end || !stationGraph.has(start) || !stationGraph.has(end)) return [];
+    if (start === end) return [start];
+
+    const distances = new Map([[start, 0]]);
+    const previous = new Map();
+    const visited = new Set();
+    const queue = [{ id: start, distance: 0 }];
+
+    while (queue.length && visited.size < ROUTE_GRAPH_MAX_VISITED) {
+        queue.sort((a, b) => a.distance - b.distance);
+        const current = queue.shift();
+        if (!current || visited.has(current.id)) continue;
+        visited.add(current.id);
+        if (current.id === end) break;
+
+        const neighbors = stationGraph.get(current.id);
+        if (!neighbors) continue;
+        neighbors.forEach((weight, neighborId) => {
+            if (visited.has(neighborId)) return;
+            const tentative = current.distance + weight;
+            const known = distances.get(neighborId);
+            if (known == null || tentative < known) {
+                distances.set(neighborId, tentative);
+                previous.set(neighborId, current.id);
+                queue.push({ id: neighborId, distance: tentative });
+            }
+        });
+    }
+
+    if (!distances.has(end)) return [];
+
+    const path = [];
+    let cursor = end;
+    while (cursor) {
+        path.unshift(cursor);
+        cursor = previous.get(cursor);
+        if (path.length > ROUTE_GRAPH_MAX_VISITED) return [];
+    }
+
+    return path[0] === start ? path : [];
+}
+
+function capIntermediateStationIds(ids, maxStops) {
+    if (ids.length <= maxStops) return ids;
+    const selected = [];
+    const step = (ids.length + 1) / (maxStops + 1);
+    for (let i = 1; i <= maxStops; i++) {
+        const index = Math.min(ids.length - 1, Math.max(0, Math.round((i * step) - 1)));
+        const id = ids[index];
+        if (!selected.includes(id)) selected.push(id);
+    }
+    return selected;
+}
+
+function computeGraphIntermediateStations(depart, arrivee) {
+    if (!depart || !arrivee) return [];
+    maybeBuildRouteGraph();
+    if (!routeGraphReady) return [];
+    const stationPath = findShortestStationPath(depart.id, arrivee.id);
+    if (stationPath.length < 3) return [];
+
+    const cappedIds = capIntermediateStationIds(stationPath.slice(1, -1), ROUTE_MAX_INTERMEDIATE_STOPS);
+    return cappedIds
+        .map(id => stationById.get(String(id)))
+        .filter(Boolean);
 }
 
 function renderIntermediateSuggestions(message = null) {
@@ -724,6 +929,7 @@ function renderIntermediateSuggestions(message = null) {
         checkbox.type = 'checkbox';
         checkbox.id = `intermediate-stop-${index}`;
         checkbox.dataset.stopId = station.id;
+        checkbox.checked = true;
 
         const stationText = document.createElement('span');
         stationText.textContent = station.nom;
@@ -746,6 +952,14 @@ async function prepareIntermediateSuggestions() {
     }
 
     try {
+        const graphSuggestions = computeGraphIntermediateStations(selectedDepart, selectedArrivee);
+        if (graphSuggestions.length > 0) {
+            intermediateStationSuggestions = graphSuggestions;
+            routePreviewCache = { key: routeKey, suggestions: intermediateStationSuggestions };
+            renderIntermediateSuggestions();
+            return;
+        }
+
         const brouterUrl = `https://brouter.de/brouter?lonlats=${selectedDepart.lon},${selectedDepart.lat}|${selectedArrivee.lon},${selectedArrivee.lat}&profile=rail&format=geojson`;
         const res = await fetch(brouterUrl);
         const geo = await res.json();
@@ -766,7 +980,7 @@ function computeIntermediateStations(routeCoordinates, depart, arrivee) {
     if (!routeCoordinates || routeCoordinates.length < 3) return [];
 
     // On échantillonne la géométrie pour trouver des gares proches du tracé sans coût excessif.
-    const maxStops = 7;
+    const maxStops = ROUTE_MAX_INTERMEDIATE_STOPS;
     const pointStep = Math.max(1, Math.floor(routeCoordinates.length / 250));
     const sampled = [];
     for (let i = 0; i < routeCoordinates.length; i += pointStep) sampled.push({ coord: routeCoordinates[i], index: i });
@@ -827,6 +1041,21 @@ function getSelectedIntermediateStops() {
     return intermediateStationSuggestions.filter(station => selectedIds.includes(String(station.id)));
 }
 
+function buildRouteStations(depart, selectedStops, arrivee) {
+    const ordered = [depart, ...selectedStops, arrivee].filter(Boolean);
+    const unique = [];
+    const seen = new Set();
+
+    ordered.forEach(station => {
+        const stationId = String(station.id || `${station.nom}:${station.lat}:${station.lon}`);
+        if (seen.has(stationId)) return;
+        seen.add(stationId);
+        unique.push(station);
+    });
+
+    return unique;
+}
+
 async function planifierTrajet() {
     const rameId = document.getElementById('select-rame').value;
     const time = document.getElementById('time-depart').value;
@@ -838,16 +1067,23 @@ async function planifierTrajet() {
     const rame = gameState.savedRames.find(r => r.id == rameId);
     if (!rame) return;
 
-    const selectedStops = getSelectedIntermediateStops();
-    const routeStations = [selectedDepart, ...selectedStops, selectedArrivee];
+    let selectedStops = getSelectedIntermediateStops();
+    if (selectedStops.length === 0) {
+        selectedStops = computeGraphIntermediateStations(selectedDepart, selectedArrivee);
+    }
+
+    const routeStations = buildRouteStations(selectedDepart, selectedStops, selectedArrivee);
     const lonLatPath = routeStations.map(station => `${station.lon},${station.lat}`).join('|');
     
     try {
         const brouterUrl = `https://brouter.de/brouter?lonlats=${lonLatPath}&profile=rail&format=geojson`;
         const res = await fetch(brouterUrl);
         const geo = await res.json();
-        
-        const dist = geo.features[0].properties['track-length'] / 1000;
+        const routeFeature = geo?.features?.[0];
+        if (!routeFeature?.geometry?.coordinates?.length) throw new Error('Aucun tracé valide');
+
+        const dist = routeFeature?.properties?.['track-length'] / 1000;
+        if (!Number.isFinite(dist) || dist <= 0) throw new Error('Distance invalide');
         const speedKmh = parseInt(rame.stats.vitesse) * 0.85;
         const timeSec = (dist / speedKmh) * 3600;
         
@@ -855,7 +1091,7 @@ async function planifierTrajet() {
         const arriveeDate = new Date(departDate.getTime() + (timeSec * 1000));
         const timeArrivee = arriveeDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
         
-        const path = geo.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        const path = routeFeature.geometry.coordinates.map(c => [c[1], c[0]]);
         
         gameState.activeRoutes.push({
             rameNom: rame.nom,
