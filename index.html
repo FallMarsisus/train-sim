@@ -3,91 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Train-Empire Studio - Époque Moderne & Rames</title>
+    <title>Train-Empire Studio Pro</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
-        header { display: block; background: #2c3e50; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
-        h1, h2, h3, h4 { margin-top: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; color: #333; }
         
-        /* Layout */
-        .main-layout { display: block; width: 100%; }
-        .left-column { display: block; width: 63%; float: left; margin-right: 2%; }
-        .right-column { display: block; width: 35%; float: left; }
-        .clear { clear: both; }
-
-        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px; box-sizing: border-box; }
+        /* HEADER ET NAVIGATION (ONGLETS) */
+        header { background: #2c3e50; color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header-titles h1 { margin: 0; font-size: 1.5em; }
+        .header-titles small { color: #bdc3c7; }
         
-        /* Filtres et Recherche */
-        .filter-bar { background: #eec; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: block; }
-        .filter-bar input, .filter-bar select { padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
-        .filter-bar input[type="text"] { width: 200px; }
+        nav { background: #34495e; padding: 0 20px; display: flex; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .tab-btn { background: none; border: none; color: #ecf0f1; padding: 15px 25px; cursor: pointer; font-size: 1em; font-weight: bold; border-bottom: 3px solid transparent; transition: 0.2s; }
+        .tab-btn:hover { background: #2c3e50; }
+        .tab-btn.active { border-bottom: 3px solid #3498db; color: #3498db; background: #2c3e50; }
+        
+        .main-container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+        
+        /* GESTION DES VUES (ONGLETS) */
+        .view-section { display: none; }
+        .view-section.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Grille Catalogue (Optimisée pour 24 items max) */
-        .grid { display: block; width: 100%; }
-        .card { display: inline-block; width: 30%; margin: 1.5%; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; box-sizing: border-box; vertical-align: top; text-align: center; font-size: 0.9em; }
-        .card img { max-width: 100%; height: auto; max-height: 45px; border-radius: 3px; display: block; margin: 0 auto 8px auto; }
-        .card h4 { font-size: 0.95em; height: 38px; overflow: hidden; margin-bottom: 5px; color: #2c3e50; }
-        .price-tag { color: #27ae60; font-weight: bold; margin: 5px 0; font-size: 1.05em; }
-        .card button { background: #3498db; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px; }
+
+        /* VUE 1 : CATALOGUE */
+        .filter-bar { background: #ecf0f1; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .filter-bar input, .filter-bar select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+        .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 15px; text-align: center; display: flex; flex-direction: column; justify-content: space-between;}
+        .card img { max-width: 100%; max-height: 60px; object-fit: contain; margin: 0 auto 10px auto; }
+        .card h4 { font-size: 0.9em; margin: 0 0 10px 0; color: #2c3e50; height: 35px; overflow: hidden; }
+        .card-stats { font-size: 0.8em; color: #7f8c8d; margin-bottom: 10px; }
+        .card button { background: #3498db; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
         .card button:hover { background: #2980b9; }
 
-        /* Pagination */
-        .pagination { text-align: center; margin-top: 15px; padding: 10px; }
+        .pagination { text-align: center; margin-top: 20px; }
         .pagination button { background: #2c3e50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 0 5px; font-weight: bold; }
-        .pagination button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        .pagination button:disabled { background: #bdc3c7; }
 
-        /* Créateur de Rame (Composition Actuelle) */
-        .comp-list { border: 1px dashed #bdc3c7; border-radius: 6px; padding: 10px; min-height: 60px; background: #fafafa; margin-bottom: 15px; }
-        .comp-item { background: #fff; border: 1px solid #ddd; padding: 6px 10px; margin-bottom: 5px; border-radius: 4px; position: relative; font-size: 0.85em; }
-        .comp-item button { background: #e74c3c; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; float: right; }
+        /* VUE 2 : ATELIER */
+        .comp-list { border: 2px dashed #bdc3c7; border-radius: 6px; padding: 15px; min-height: 100px; background: #fafafa; display: flex; gap: 10px; overflow-x: auto; align-items: center; }
+        .comp-item { background: #fff; border: 1px solid #ddd; padding: 10px; border-radius: 6px; text-align: center; min-width: 120px; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .comp-item img { max-width: 100px; max-height: 40px; display: block; margin: 0 auto 5px auto; }
+        .comp-item span { font-size: 0.75em; font-weight: bold; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+        .remove-btn { position: absolute; top: -8px; right: -8px; background: #e74c3c; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-weight: bold; }
         
-        /* Alertes Logiques */
-        .logic-warning { background: #f39c12; color: white; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 0.85em; display: none; font-weight: bold; }
-        .logic-success { background: #27ae60; color: white; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 0.85em; display: none; font-weight: bold; }
+        .logic-alert { padding: 10px; border-radius: 4px; margin-top: 15px; font-weight: bold; font-size: 0.9em; display: none; }
+        .logic-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .logic-warn { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .logic-ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
 
-        .stats-box { background: #ecf0f1; padding: 12px; border-radius: 6px; font-size: 0.9em; margin-bottom: 15px; }
-        .stats-box div { margin-bottom: 5px; }
-        
-        .action-btn { width: 100%; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: white; margin-bottom: 5px; }
-        
-        /* Inventaire des rames sauvegardées */
-        .saved-rame { border: 1px solid #34495e; border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #fff; }
+        .stats-box { background: #ecf0f1; padding: 15px; border-radius: 6px; display: flex; gap: 20px; margin-top: 15px; font-size: 0.95em; }
+
+        /* VUE 3 : DÉPÔT (RAMES SAUVEGARDÉES) */
+        .saved-rame { border: 1px solid #bdc3c7; border-radius: 6px; padding: 15px; margin-bottom: 15px; background: #fff; }
+        .rame-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px; }
+        .rame-visualizer { display: flex; gap: 2px; overflow-x: auto; padding: 10px 0; background: #f8f9fa; border-radius: 4px; align-items: center; padding-left: 10px; }
+        .rame-visualizer img { max-height: 35px; object-fit: contain; }
+        .coupler { font-size: 0.8em; color: #95a5a6; padding: 0 2px; }
     </style>
 </head>
 <body>
 
     <header>
-        <div style="float: left;">
-            <h1 style="margin: 0;">Train-Empire Studio</h1>
-            <small>Version Statique Optimisée — Catalogue Complet & Gestion de Convois Logiques</small>
+        <div class="header-titles">
+            <h1>Train-Empire Studio</h1>
+            <small>Système de conception ferroviaire avancé</small>
         </div>
-        <div style="float: right; margin-top: 5px;">
-            <button onclick="exportGameData()" style="padding: 8px 12px; font-weight: bold; cursor: pointer;">💾 Exporter l'Empire</button>
+        <div>
+            <button onclick="exportGameData()" style="padding: 8px; cursor: pointer;">💾 Sauvegarder Dépôt</button>
             <input type="file" id="import-file" style="display: none;" accept=".json" onchange="importGameData(event)">
-            <button onclick="document.getElementById('import-file').click()" style="padding: 8px 12px; font-weight: bold; cursor: pointer;">📂 Importer</button>
+            <button onclick="document.getElementById('import-file').click()" style="padding: 8px; cursor: pointer;">📂 Charger</button>
         </div>
-        <div style="clear: both;"></div>
     </header>
 
-    <div class="main-layout">
-        
-        <div class="left-column">
+    <!-- NAVIGATION PAR ONGLETS -->
+    <nav>
+        <button class="tab-btn active" onclick="switchTab('catalogue')">1. Catalogue & Achats</button>
+        <button class="tab-btn" onclick="switchTab('atelier')">2. Atelier d'Assemblage</button>
+        <button class="tab-btn" onclick="switchTab('depot')">3. Dépôt de Rames</button>
+    </nav>
+
+    <div class="main-container">
+
+        <!-- ================= ONGLET 1 : CATALOGUE ================= -->
+        <div id="view-catalogue" class="view-section active">
             <div class="panel">
-                <h2>Catalogue Global</h2>
-                
                 <div class="filter-bar">
-                    <input type="text" id="search-input" placeholder="🔍 Rechercher un modèle..." oninput="applyFilters()">
+                    <input type="text" id="search-input" placeholder="🔍 Nom du train..." oninput="applyFilters()" style="flex: 1; min-width: 200px;">
                     <select id="type-filter" onchange="applyFilters()">
                         <option value="all">Tous les types</option>
                         <option value="loco">Locomotives</option>
-                        <option value="autorail">Rames / TGV / Autorails</option>
+                        <option value="autorail">Rames Automotrices / TGV</option>
                         <option value="voyageur">Voitures Voyageurs</option>
-                        <option value="fret">Wagons Fret</option>
+                        <option value="fret">Wagons Marchandises</option>
                     </select>
-                    <select id="sort-filter" onchange="applyFilters()">
-                        <option value="nom">Trier par Nom</option>
-                        <option value="prix-asc">Prix : du - cher</option>
-                        <option value="prix-desc">Prix : du + cher</option>
+                    <select id="gabarit-filter" onchange="applyFilters()">
+                        <option value="all">Tous les gabarits (Attelages)</option>
+                        <option value="Continental">Continental</option>
+                        <option value="Britannique">Britannique</option>
                     </select>
                 </div>
 
@@ -95,139 +110,144 @@
 
                 <div class="pagination">
                     <button id="btn-prev" onclick="changePage(-1)">◀ Précédent</button>
-                    <span id="page-indicator" style="margin: 0 15px; font-weight: bold;">Page 1 / 1</span>
+                    <span id="page-indicator" style="margin: 0 15px; font-weight: bold;">Page 1</span>
                     <button id="btn-next" onclick="changePage(1)">Suivant ▶</button>
                 </div>
             </div>
         </div>
 
-        <div class="right-column">
-            
-            <div class="panel" style="border-top: 4px solid #3498db;">
-                <h3>🛠️ Atelier de Composition</h3>
-                <p style="font-size: 0.85em; color: #7f8c8d; margin-top: -10px;">Assemblez vos motrices et wagons de manière cohérente.</p>
+        <!-- ================= ONGLET 2 : ATELIER ================= -->
+        <div id="view-atelier" class="view-section">
+            <div class="panel">
+                <h2>🛠️ Plan de Travail</h2>
+                <p style="color:#7f8c8d; margin-top:-10px;">Ajoutez des matériels depuis le Catalogue pour créer une composition fonctionnelle.</p>
                 
                 <div id="active-composition" class="comp-list">
-                    </div>
+                    <!-- Les wagons apparaissent ici -->
+                </div>
 
-                <div id="logic-warning" class="logic-warning"></div>
-                <div id="logic-success" class="logic-success"></div>
+                <div id="logic-box" class="logic-alert"></div>
 
                 <div class="stats-box">
-                    <div><strong>Coût de la rame :</strong> <span id="comp-cost" style="color:#27ae60; font-weight:bold;">0 €</span></div>
-                    <div><strong>Vitesse max de la rame :</strong> <span id="comp-speed" style="font-weight:bold;">0 km/h</span> <small style="color:#7f8c8d;">(limite du matériel le plus lent)</small></div>
-                    <div><strong>Capacité totale :</strong> <span id="comp-capacity" style="font-weight:bold;">0 places</span></div>
+                    <div><strong>Coût estimé :</strong> <span id="comp-cost" style="color:#27ae60;">0 €</span></div>
+                    <div><strong>Vitesse Max :</strong> <span id="comp-speed">0 km/h</span></div>
+                    <div><strong>Capacité totale :</strong> <span id="comp-capacity">0 places</span></div>
+                    <div><strong>Gabarit dominant :</strong> <span id="comp-gabarit">-</span></div>
                 </div>
 
-                <button class="action-btn" onclick="saveActiveRame()" style="background: #27ae60;">Enregistrer la Rame dans le Dépôt</button>
-                <button class="action-btn" onclick="clearActiveComposition()" style="background: #e74c3c; padding: 6px;">Vider l'atelier</button>
-            </div>
-
-            <div class="panel" style="border-top: 4px solid #f39c12;">
-                <h3>🚂 Mon Dépôt de Rames</h3>
-                <div id="saved-rames-container">
-                    <p style="color: #7f8c8d; font-size: 0.9em; text-align: center;">Aucune rame assemblée pour le moment.</p>
+                <div style="margin-top: 15px; text-align: right;">
+                    <button onclick="clearActiveComposition()" style="padding: 10px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">Vider la voie</button>
+                    <button id="btn-save-rame" onclick="saveActiveRame()" style="padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-left: 10px;">Valider et envoyer au Dépôt</button>
                 </div>
             </div>
-
         </div>
 
-        <div class="clear"></div>
+        <!-- ================= ONGLET 3 : DÉPÔT ================= -->
+        <div id="view-depot" class="view-section">
+            <div class="panel">
+                <h2>🚂 Rames en Service</h2>
+                <div id="saved-rames-container">
+                    <p style="color: #7f8c8d; text-align: center;">Aucune rame dans votre dépôt.</p>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
-        // --- VARIABLES GLOBALES ---
-        let trainDatabase = [];      // Reçu depuis le gros JSON
-        let filteredTrains = [];     // Filtré par l'utilisateur
-        let activeComposition = [];  // Rame en cours de création
-        let savedRames = [];         // Vos rames enregistrées en jeu
-
-        // Pagination
+        // Variables globales
+        let trainDatabase = [];
+        let filteredTrains = [];
+        let activeComposition = [];
+        let savedRames = [];
+        
         let currentPage = 1;
-        const itemsPerPage = 24;     // N'affiche QUE 24 éléments à la fois dans le navigateur !
+        const itemsPerPage = 24;
 
-        // --- CHARGEMENT INITIAL ---
+        // --- GESTION DES ONGLETS ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.view-section').forEach(view => view.classList.remove('active'));
+            
+            event.currentTarget.classList.add('active');
+            document.getElementById('view-' + tabId).classList.add('active');
+            
+            if(tabId === 'atelier') updateCompositionUI();
+            if(tabId === 'depot') renderSavedRames();
+        }
+
+        // --- INITIALISATION ---
         async function initGame() {
             try {
-                // Chargement de ton gros fichier JSON de 2991 lignes
                 const response = await fetch('train_empire_complet.json');
                 const rawData = await response.json();
                 
-                // Pré-calcul logique des prix, vitesses et capacités pour chaque train à la volée
                 trainDatabase = rawData.map(train => {
-                    const stats = calculateLogicalStats(train);
+                    const stats = parseLogicalStats(train);
                     return { ...train, ...stats };
                 });
-
                 filteredTrains = [...trainDatabase];
                 
-                // Charger le dépôt du joueur depuis le stockage du navigateur
-                const savedData = localStorage.getItem('myTrainEmpireRames');
+                const savedData = localStorage.getItem('myTrainEmpireRamesPro');
                 if (savedData) savedRames = JSON.parse(savedData);
 
                 applyFilters();
-                renderSavedRames();
             } catch (error) {
-                console.error(error);
-                document.getElementById('shop-grid').innerHTML = "<p style='color:red; font-weight:bold;'>Erreur critique : Impossible de charger le fichier 'train_empire_complet.json'. Assurez-vous de lancer un serveur de développement local (ex: python -m http.server).</p>";
+                document.getElementById('shop-grid').innerHTML = "<p style='color:red;'>Erreur de chargement du JSON.</p>";
             }
         }
 
-        // --- MOTEUR LOGIQUE : CALCUL DES STATS ET PRIX D'UN TRAIN ---
-        function calculateLogicalStats(train) {
-            let speed = 90; // Vitesse par défaut si non spécifiée
+        // --- MOTEUR DE PARSING AVANCÉ (VITESSE, PLACES, GABARIT) ---
+        function parseLogicalStats(train) {
+            let speed = 90;
             let capacity = 0;
+            let gabarit = "Universel"; // Par défaut
 
-            // Extraction des données chiffrées à partir des caractéristiques textuelles scrapées
             if (train.caracteristiques) {
                 train.caracteristiques.forEach(attr => {
-                    let speedMatch = attr.match(/(\d+)\s*km\/h/i);
+                    let text = attr.toLowerCase();
+                    
+                    // 1. Vitesse
+                    let speedMatch = text.match(/(\d+)\s*km\/h/);
                     if (speedMatch) speed = parseInt(speedMatch[1]);
                     
-                    let capMatch = attr.match(/(\d+)\s*places/i);
-                    if (capMatch) capacity += parseInt(capMatch[1]);
+                    // 2. Capacité (CORRECTION DU BUG)
+                    // Cherche les formats "1e classe : 40", "Places : 40", "40 places"
+                    let classMatch = text.match(/classe\s*:\s*(\d+)/i) || text.match(/:\s*(\d+)\s*place/i);
+                    let genericMatch = text.match(/(\d+)\s*place/i) || text.match(/(\d+)\s*passager/i);
+                    
+                    if (classMatch) capacity += parseInt(classMatch[1]);
+                    else if (genericMatch) capacity += parseInt(genericMatch[1]);
+
+                    // 3. Attelage / Gabarit
+                    if (text.includes('britannique')) gabarit = 'Britannique';
+                    if (text.includes('continental')) gabarit = 'Continental';
                 });
             }
 
-            // FORMULE DE COÛT LOGIQUE IN-GAME
-            let baseCost = 40000; // Wagons de base
-            if (train.type === 'loco') baseCost = 350000;
-            if (train.type === 'autorail') baseCost = 600000; // TGV entiers ou motrices complexes
-            if (train.type === 'voyageur') baseCost = 90000;
+            // Calcul du prix logique
+            let baseCost = (train.type === 'loco') ? 300000 : (train.type === 'autorail') ? 500000 : 70000;
+            let finalPrice = Math.round((baseCost * Math.pow(speed/100, 2)) + (capacity * 500));
+            if (finalPrice < 10000) finalPrice = 10000;
 
-            // Multiplicateur lié à la performance cinétique (vitesse au carré pour simuler la haute technologie)
-            let speedMultiplier = Math.pow(speed / 100, 2);
-            let capacityBonus = capacity * 650;
+            // Résolution de l'image (privilégie Base64)
+            let finalImage = (train.image_base64 && train.image_base64.startsWith('data:')) ? train.image_base64 : train.image_url;
 
-            let finalPrice = Math.round((baseCost * speedMultiplier) + capacityBonus);
-            
-            // Équilibrages minimum pour éviter les aberrations de prix
-            if (finalPrice < 15000) finalPrice = 15000;
-
-            return { speed, capacity, logicalPrice: finalPrice };
+            return { speed, capacity, gabarit, logicalPrice: finalPrice, imgResolved: finalImage };
         }
 
-        // --- FILTRAGE ET PAGINATION ---
+        // --- CATALOGUE : FILTRES ET PAGINATION ---
         function applyFilters() {
             const searchTxt = document.getElementById('search-input').value.toLowerCase();
             const typeVal = document.getElementById('type-filter').value;
-            const sortVal = document.getElementById('sort-filter').value;
+            const gabVal = document.getElementById('gabarit-filter').value;
 
-            // Filtres textuels et typologiques
             filteredTrains = trainDatabase.filter(train => {
                 const matchesSearch = train.nom.toLowerCase().includes(searchTxt);
                 const matchesType = (typeVal === 'all' || train.type === typeVal);
-                return matchesSearch && matchesType;
+                const matchesGab = (gabVal === 'all' || train.gabarit === gabVal || train.gabarit === 'Universel');
+                return matchesSearch && matchesType && matchesGab;
             });
-
-            // Tris
-            if (sortVal === 'nom') {
-                filteredTrains.sort((a, b) => a.nom.localeCompare(b.nom));
-            } else if (sortVal === 'prix-asc') {
-                filteredTrains.sort((a, b) => a.logicalPrice - b.logicalPrice);
-            } else if (sortVal === 'prix-desc') {
-                filteredTrains.sort((a, b) => b.logicalPrice - a.logicalPrice);
-            }
 
             currentPage = 1;
             renderShop();
@@ -236,33 +256,25 @@
         function renderShop() {
             const shopGrid = document.getElementById('shop-grid');
             shopGrid.innerHTML = '';
-
             const totalPages = Math.ceil(filteredTrains.length / itemsPerPage) || 1;
-            
-            // Découpage du tableau pour n'afficher que les 24 de la page active (Le secret des performances !)
-            const startIndex = (currentPage - 1) * itemsPerPage;
-            const selectedItems = filteredTrains.slice(startIndex, startIndex + itemsPerPage);
-
-            if (selectedItems.length === 0) {
-                shopGrid.innerHTML = "<p style='grid-column: 1/-1; color:#7f8c8d; text-align:center;'>Aucun matériel ne correspond à vos critères.</p>";
-            }
+            const selectedItems = filteredTrains.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
             selectedItems.forEach(train => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                const imgSrc = train.image_base64 && train.image_base64.startsWith('data:') ? train.image_base64 : train.image_url;
-                
                 card.innerHTML = `
-                    <img src="${imgSrc}" alt="${train.nom}" onerror="this.src='https://via.placeholder.com/150?text=Train'">
+                    <img src="${train.imgResolved}" alt="train">
                     <h4>${train.nom}</h4>
-                    <div class="price-tag">${train.logicalPrice.toLocaleString('fr-FR')} €</div>
-                    <div style="font-size:0.75em; color:#7f8c8d; margin-bottom:8px;">${train.speed} km/h | ${train.capacity} places</div>
+                    <div class="card-stats">
+                        ⚡ ${train.speed} km/h | 👥 ${train.capacity} pl.<br>
+                        🔗 Gabarit ${train.gabarit}<br>
+                        <strong style="color:#27ae60; font-size:1.1em;">${train.logicalPrice.toLocaleString()} €</strong>
+                    </div>
                     <button onclick="addToComposition('${train.nom.replace(/'/g, "\\'")}')">Ajouter à l'atelier</button>
                 `;
                 shopGrid.appendChild(card);
             });
 
-            // MAJ indicateurs de page
             document.getElementById('page-indicator').innerText = `Page ${currentPage} / ${totalPages}`;
             document.getElementById('btn-prev').disabled = (currentPage === 1);
             document.getElementById('btn-next').disabled = (currentPage === totalPages);
@@ -271,18 +283,17 @@
         function changePage(direction) {
             currentPage += direction;
             renderShop();
-            window.scrollTo(0, 0);
         }
 
-        // --- ATELIER DE COMPOSITION (LOGIQUE DU CONVOI) ---
+        // --- ATELIER : LOGIQUE DE COMPOSITION ---
         function addToComposition(trainName) {
             const originalTrain = trainDatabase.find(t => t.nom === trainName);
-            if (!originalTrain) return;
-
-            // On pousse une copie unique dans la rame en cours
-            activeComposition.push({ ...originalTrain, uniqueId: Date.now() + Math.random() });
-            
-            updateCompositionUI();
+            if (originalTrain) {
+                activeComposition.push({ ...originalTrain, uniqueId: Date.now() + Math.random() });
+                
+                // Notification visuelle sur le bouton cliqué (optionnel)
+                switchTab('atelier'); // Bascule directement sur l'atelier pour voir l'ajout
+            }
         }
 
         function removeFromComposition(uniqueId) {
@@ -297,127 +308,98 @@
 
         function updateCompositionUI() {
             const container = document.getElementById('active-composition');
+            const logicBox = document.getElementById('logic-box');
+            const saveBtn = document.getElementById('btn-save-rame');
             container.innerHTML = '';
 
             if (activeComposition.length === 0) {
-                container.innerHTML = '<p style="color: #7f8c8d; text-align: center; font-size: 0.9em; margin: 10px 0;">L\'atelier est vide. Sélectionnez du matériel.</p>';
+                container.innerHTML = '<p style="color: #ccc; margin: auto;">La voie de montage est vide.</p>';
                 document.getElementById('comp-cost').innerText = "0 €";
                 document.getElementById('comp-speed').innerText = "0 km/h";
                 document.getElementById('comp-capacity').innerText = "0 places";
-                document.getElementById('logic-warning').style.display = 'none';
-                document.getElementById('logic-success').style.display = 'none';
+                document.getElementById('comp-gabarit').innerText = "-";
+                logicBox.style.display = 'none';
+                saveBtn.disabled = true;
+                saveBtn.style.opacity = '0.5';
                 return;
             }
 
-            let totalCost = 0;
-            let totalCapacity = 0;
-            let speeds = [];
-            
-            let countLocoOrAutorail = 0;
-            let countFret = 0;
-            let countVoyageur = 0;
+            let totalCost = 0; let totalCapacity = 0; let speeds = []; let gabarits = new Set();
+            let hasMotor = false;
 
             activeComposition.forEach(item => {
                 totalCost += item.logicalPrice;
                 totalCapacity += item.capacity;
                 speeds.push(item.speed);
-
-                if (item.type === 'loco' || item.type === 'autorail') countLocoOrAutorail++;
-                if (item.type === 'fret') countFret++;
-                if (item.type === 'voyageur') countVoyageur++;
+                if(item.gabarit !== "Universel") gabarits.add(item.gabarit);
+                if (item.type === 'loco' || item.type === 'autorail') hasMotor = true;
 
                 const div = document.createElement('div');
                 div.className = 'comp-item';
                 div.innerHTML = `
-                    <strong>[${item.type.toUpperCase()}]</strong> ${item.nom} (${item.speed} km/h)
-                    <button onclick="removeFromComposition(${item.uniqueId})">✕</button>
+                    <button class="remove-btn" onclick="removeFromComposition(${item.uniqueId})">✕</button>
+                    <img src="${item.imgResolved}">
+                    <span title="${item.nom}">${item.nom}</span>
                 `;
                 container.appendChild(div);
             });
 
-            // CALCULS ET LOGIQUES DES COMPOSITIONS
-            let minSpeed = Math.min(...speeds); // La vitesse globale de la rame est restreinte par son wagon le plus lent
-            
-            document.getElementById('comp-cost').innerText = totalCost.toLocaleString('fr-FR') + " €";
-            document.getElementById('comp-speed').innerText = minSpeed + " km/h";
+            document.getElementById('comp-cost').innerText = totalCost.toLocaleString() + " €";
+            document.getElementById('comp-speed').innerText = Math.min(...speeds) + " km/h";
             document.getElementById('comp-capacity').innerText = totalCapacity + " places";
+            
+            let mainGabarit = gabarits.size > 0 ? Array.from(gabarits).join(' & ') : "Universel";
+            document.getElementById('comp-gabarit').innerText = mainGabarit;
 
-            // ANALYSE COHÉRENCE ET RÈGLES DE JEU
-            const warningBox = document.getElementById('logic-warning');
-            const successBox = document.getElementById('logic-success');
-            warningBox.innerHTML = '';
-            warningBox.style.display = 'none';
-            successBox.style.display = 'none';
+            // VALIDATION LOGIQUE (RÈGLES D'ATTELAGE)
+            logicBox.style.display = 'block';
+            logicBox.className = 'logic-alert'; // reset classes
 
-            let isLogicValid = true;
-            let warningMessages = [];
+            let canSave = true;
 
-            // RÈGLE 1 : Présence d'une motorisation
-            if (countLocoOrAutorail === 0) {
-                isLogicValid = false;
-                warningMessages.push("❌ Rame invalide : Votre convoi n'a pas de motrice (Ajoutez une Locomotive ou un Autorail/TGV).");
+            if (gabarits.size > 1) {
+                logicBox.classList.add('logic-error');
+                logicBox.innerHTML = `❌ Erreur d'attelage : Vous mélangez des matériels incompatibles (${mainGabarit}). La rame va dérailler.`;
+                canSave = false;
+            } else if (!hasMotor) {
+                logicBox.classList.add('logic-error');
+                logicBox.innerHTML = `❌ Erreur : Cette rame n'a aucune motrice (Loco ou Autorail). Elle ne peut pas rouler.`;
+                canSave = false;
+            } else {
+                logicBox.classList.add('logic-ok');
+                logicBox.innerHTML = `✅ Composition validée. Les attelages sont compatibles.`;
             }
 
-            // RÈGLE 2 : Incohérences de type Fret vs Passagers
-            if (countFret > 0 && countVoyageur > 0) {
-                warningMessages.push("⚠️ Alerte Règle : Convoi mixte (Fret + Voyageurs). Autorisé mais réduit le réalisme de la ligne.");
-            }
-
-            // RÈGLE 3 : Puissance / Traction logique (Une loco ne peut pas tirer à l'infini)
-            let totalWagons = countFret + countVoyageur;
-            if (countLocoOrAutorail > 0 && totalWagons > (countLocoOrAutorail * 12)) {
-                isLogicValid = false;
-                warningMessages.push(`❌ Masse critique : Vos ${countLocoOrAutorail} motrice(s) n'ont pas la puissance pour tracter ${totalWagons} wagons (Maximum 12 par motrice).`);
-            }
-
-            // Affichage des verdicts
-            if (warningMessages.length > 0) {
-                warningBox.innerHTML = warningMessages.join('<br>');
-                warningBox.style.display = 'block';
-            }
-            if (isLogicValid) {
-                successBox.innerText = "✅ Structure de rame conforme et prête à rouler !";
-                successBox.style.display = 'block';
-            }
+            saveBtn.disabled = !canSave;
+            saveBtn.style.opacity = canSave ? '1' : '0.5';
         }
 
-        // --- SAUVEGARDE ET GESTION DU DÉPÔT DE RAMES ---
+        // --- DÉPÔT : SAUVEGARDE ET VISUALISATION ---
         function saveActiveRame() {
-            if (activeComposition.length === 0) return alert("Atelier vide !");
-            
-            // Vérification de sécurité motrice avant d'autoriser la sauvegarde définitive
-            const hasMotor = activeComposition.some(item => item.type === 'loco' || item.type === 'autorail');
-            if(!hasMotor) {
-                if(!confirm("Attention: Votre rame n'a aucune motrice pour avancer. Voulez-vous quand même la mettre au dépôt ?")) return;
-            }
-
-            const name = prompt("Donnez un nom à cette composition de train :", "Rame Express N°" + (savedRames.length + 1));
+            const name = prompt("Nom de baptême de cette rame :", "Intercités " + Math.floor(Math.random()*1000));
             if (!name) return;
-
-            let totalCost = activeComposition.reduce((sum, item) => sum + item.logicalPrice, 0);
-            let minSpeed = Math.min(...activeComposition.map(item => item.speed));
-            let totalCapacity = activeComposition.reduce((sum, item) => sum + item.capacity, 0);
 
             const nouvelleRame = {
                 id: Date.now(),
-                nomRame: name,
-                elements: activeComposition.map(item => ({ nom: item.nom, type: item.type })),
-                coutTotal: totalCost,
-                vitesseMax: minSpeed,
-                capacite: totalCapacity
+                nom: name,
+                elements: activeComposition.map(item => ({ nom: item.nom, img: item.imgResolved })),
+                stats: {
+                    cout: document.getElementById('comp-cost').innerText,
+                    vitesse: document.getElementById('comp-speed').innerText,
+                    places: document.getElementById('comp-capacity').innerText
+                }
             };
 
             savedRames.push(nouvelleRame);
-            localStorage.setItem('myTrainEmpireRames', JSON.stringify(savedRames));
-            
+            localStorage.setItem('myTrainEmpireRamesPro', JSON.stringify(savedRames));
             clearActiveComposition();
-            renderSavedRames();
+            switchTab('depot'); // Envoie l'utilisateur voir sa création
         }
 
-        function deleteSavedRame(id) {
-            if (confirm("Supprimer définitivement cette rame du dépôt ?")) {
+        function deleteRame(id) {
+            if (confirm("Détruire cette rame ?")) {
                 savedRames = savedRames.filter(r => r.id !== id);
-                localStorage.setItem('myTrainEmpireRames', JSON.stringify(savedRames));
+                localStorage.setItem('myTrainEmpireRamesPro', JSON.stringify(savedRames));
                 renderSavedRames();
             }
         }
@@ -427,35 +409,38 @@
             container.innerHTML = '';
 
             if (savedRames.length === 0) {
-                container.innerHTML = '<p style="color: #7f8c8d; font-size: 0.9em; text-align: center;">Aucune rame assemblée pour le moment.</p>';
+                container.innerHTML = '<p style="color: #7f8c8d; text-align: center;">Dépôt vide.</p>';
                 return;
             }
 
             savedRames.forEach(rame => {
                 const div = document.createElement('div');
                 div.className = 'saved-rame';
+                
+                // Génération de la "chenille" d'images pour visualiser la rame
+                let visualHtml = rame.elements.map(el => `<img src="${el.img}" title="${el.nom}">`).join('<span class="coupler">-</span>');
+
                 div.innerHTML = `
-                    <div style="font-weight: bold; color: #2c3e50; font-size: 1.05em; margin-bottom: 5px;">
-                        🚂 ${rame.nomRame}
-                        <button onclick="deleteSavedRame(${rame.id})" style="background:#e74c3c; color:white; border:none; float:right; border-radius:3px; cursor:pointer; padding:2px 6px;">Démanteler</button>
+                    <div class="rame-header">
+                        <strong style="font-size: 1.2em; color: #2c3e50;">🚆 ${rame.nom}</strong>
+                        <button onclick="deleteRame(${rame.id})" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Détruire</button>
                     </div>
-                    <div style="font-size: 0.8em; color: #555;">
-                        <strong>Composée de :</strong> ${rame.elements.length} modules (${rame.elements.map(e => e.nom.split(' ')[0]).join(' + ')})
+                    <div style="font-size: 0.9em; margin-bottom: 10px; color: #7f8c8d;">
+                        Val: ${rame.stats.cout} | Max: ${rame.stats.vitesse} | Capa: ${rame.stats.places}
                     </div>
-                    <div style="font-size: 0.85em; margin-top: 5px; color: #27ae60; font-weight: bold;">
-                        💰 Val. : ${rame.coutTotal.toLocaleString('fr-FR')} € | ⚡ Max : ${rame.vitesseMax} km/h | 👥 Capa : ${rame.capacite} passagers
+                    <div class="rame-visualizer">
+                        ${visualHtml}
                     </div>
                 `;
                 container.appendChild(div);
             });
         }
 
-        // --- IMPORTS EXPORTS ---
         function exportGameData() {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedRames));
             const dlAnchor = document.createElement('a');
             dlAnchor.setAttribute("href", dataStr);
-            dlAnchor.setAttribute("download", "mon_empire_de_trains.json");
+            dlAnchor.setAttribute("download", "mes_rames_sauvegardees.json");
             dlAnchor.click();
         }
 
@@ -466,10 +451,10 @@
             reader.onload = function(e) {
                 try {
                     savedRames = JSON.parse(e.target.result);
-                    localStorage.setItem('myTrainEmpireRames', JSON.stringify(savedRames));
-                    renderSavedRames();
-                    alert("Dépôt synchronisé ! Vos rames ont été importées.");
-                } catch(err) { alert("Fichier de sauvegarde corrompu."); }
+                    localStorage.setItem('myTrainEmpireRamesPro', JSON.stringify(savedRames));
+                    if(document.getElementById('view-depot').classList.contains('active')) renderSavedRames();
+                    alert("Importation réussie !");
+                } catch(err) { alert("Fichier invalide."); }
             };
             reader.readAsText(file);
         }
