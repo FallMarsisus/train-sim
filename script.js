@@ -445,295 +445,136 @@ function importGameData(event) {
 }
 
 window.onload = initGame;
-
-// --- MODULE CARTE ET ROUTAGE ---
-let map = null;
-let markersLayer = null;
-let routesLayer = null;
-
-let selectedDepart = null;
-let selectedArrivee = null;
-let sncfStations = []; // Stockage global des gares pour les calculs de passage
-
-const originalSwitchTab = switchTab;
-switchTab = function(tabId) {
-    originalSwitchTab(tabId);
-    if (tabId === 'carte') {
-        initMap();
-        updateRameSelector();
-        renderActiveRoutes();
-    }
-};
+// --- CARTE & ROUTAGE ---
+let map = null, markersLayer = null, routesLayer = null, networkLayer = null;
+let sncfStations = [];
+let selectedDepart = null, selectedArrivee = null;
 
 function initMap() {
-    if (map !== null) {
-        map.invalidateSize();
-        return;
-    }
-
-    map = L.map('map').setView([46.603354, 1.888334], 6);
-
-    // Fond de carte clair
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 19
+    if (map) { map.invalidateSize(); return; }
+    
+    // Initialisation de la carte centrée sur la France
+    map = L.map('map').setView([46.6, 1.8], 6);
+    
+    // Fond de carte clair et épuré
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { 
+        attribution: '© Carto, OpenStreetMap contributors' 
     }).addTo(map);
-
-    // Couche OpenRailwayMap
-    L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
-        attribution: '© OpenRailwayMap',
-        maxZoom: 19,
-        opacity: 0.8
-    }).addTo(map);
-
-    markersLayer = L.layerGroup().addTo(map);
-    routesLayer = L.layerGroup().addTo(map);
-
-    fetchGaresSNCF();
+    
+    // Initialisation des calques (l'ordre est important pour la superposition)
+    networkLayer = L.layerGroup().addTo(map); // Les rails en dessous
+    routesLayer = L.layerGroup().addTo(map);  // Les trajets calculés au milieu
+    markersLayer = L.layerGroup().addTo(map); // Les gares au-dessus
+    
+    // Chargement des fichiers de données locaux
+    fetchGaresLocales();
+    fetchLignesLocales();
 }
 
-async function fetchGaresSNCF() {
-    // 1. Liste de secours (Fallback) pour garantir que le jeu fonctionne même si l'API SNCF est hors-ligne
-    const garesSecours = [
-        { nom: "Paris Gare de Lyon", lat: 48.8443, lon: 2.3744 },
-        { nom: "Paris Montparnasse", lat: 48.8412, lon: 2.3205 },
-        { nom: "Paris Gare du Nord", lat: 48.8809, lon: 2.3553 },
-        { nom: "Lyon Part-Dieu", lat: 45.7606, lon: 4.8595 },
-        { nom: "Marseille Saint-Charles", lat: 43.3026, lon: 5.3804 },
-        { nom: "Lille Europe", lat: 50.6394, lon: 3.0750 },
-        { nom: "Bordeaux Saint-Jean", lat: 44.8259, lon: -0.5548 },
-        { nom: "Strasbourg", lat: 48.5851, lon: 7.7342 },
-        { nom: "Nantes", lat: 47.2173, lon: -1.5414 },
-        { nom: "Rennes", lat: 48.1033, lon: -1.6724 },
-        { nom: "Toulouse Matabiau", lat: 43.6111, lon: 1.4536 },
-        { nom: "Montpellier Saint-Roch", lat: 43.6045, lon: 3.8805 },
-        { nom: "Nice Ville", lat: 43.7044, lon: 7.2619 },
-        { nom: "Dijon Ville", lat: 47.3236, lon: 5.0275 },
-        { nom: "Tours", lat: 47.3898, lon: 0.6938 },
-        { nom: "Genève Cornavin (CH)", lat: 46.2102, lon: 6.1424 }
-    ];
-
-    // Nouvelle URL de l'API (liste-des-gares)
-    const url = "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/liste-des-gares/records?limit=100";
-    
-    sncfStations = []; // On réinitialise la mémoire
-
+// Chargement des gares
+async function fetchGaresLocales() {
     try {
-        const response = await fetch(url);
+        const response = await fetch('gares-de-voyageurs.json');
+        const data = await response.json(); //
         
-        // Si la SNCF renvoie une erreur 404, 500, etc., on déclenche le catch
-        if (!response.ok) {
-            throw new Error(`Le serveur SNCF a répondu avec le statut ${response.status}`);
-        }
-
-        const data = await response.json();
-        
-        // La nouvelle API SNCF stocke parfois dans "results", parfois dans "records"
-        const tableauGares = data.results || data.records;
-
-        if (!tableauGares) {
-            throw new Error("Structure des données SNCF non reconnue.");
-        }
-
-        tableauGares.forEach(gare => {
-            // Tolérance sur le nom des propriétés géospatiales qui changent souvent
-            const coords = gare.wgs_84 || gare.geo_point_2d || gare.coordonnees_geographiques;
-            if (!coords) return;
-            
-            const lat = coords.lat !== undefined ? coords.lat : coords[0];
-            const lon = coords.lon !== undefined ? coords.lon : coords[1];
-            const nomGare = gare.libelle || gare.gare_alias_libelle_noncontraint;
-
-            if (nomGare && lat && lon) {
-                sncfStations.push({ nom: nomGare, lat: parseFloat(lat), lon: parseFloat(lon) });
+        data.forEach(gare => {
+            if (gare.position_geographique) {
+                const lat = gare.position_geographique.lat; //[cite: 2]
+                const lon = gare.position_geographique.lon; //[cite: 2]
+                const nom = gare.nom; //[cite: 2]
+                
+                const marker = L.marker([lat, lon], { 
+                    icon: L.divIcon({ html: '🚉', className: 'station-icon', iconSize: [15, 15] }) 
+                }).addTo(markersLayer);
+                
+                marker.bindTooltip(nom);
+                marker.on('click', () => handleStationClick(nom, lat, lon));
+                
+                sncfStations.push({ nom, lat, lon });
             }
         });
+    } catch (e) { console.error("Erreur gares:", e); }
+}
 
-    } catch (e) {
-        console.warn("⚠️ API SNCF indisponible. Chargement des gares de secours locales. Raison :", e.message);
-        // On copie la liste de secours dans la liste officielle du jeu
-        sncfStations = [...garesSecours];
-    }
-
-    // --- AFFICHAGE SUR LA CARTE ---
-    // Cette partie s'exécute quoi qu'il arrive, en utilisant soit les vraies données, soit la liste de secours
-    sncfStations.forEach(gare => {
-        const stationIcon = L.divIcon({ html: '🚉', className: 'station-icon', iconSize: [20, 20] });
-        const marker = L.marker([gare.lat, gare.lon], { icon: stationIcon }).addTo(markersLayer);
+// Chargement du réseau ferré
+async function fetchLignesLocales() {
+    try {
+        const response = await fetch('lignes_sncf.json');
+        const geojsonData = await response.json(); //
         
-        marker.bindTooltip(gare.nom);
-        marker.on('click', () => handleStationClick(gare.nom, gare.lat, gare.lon));
-    });
+        // Leaflet dessine automatiquement les tracés LineString du GeoJSON
+        L.geoJSON(geojsonData, {
+            style: function (feature) { //[cite: 3]
+                // Style par défaut du réseau (tu pourras l'adapter si tu ajoutes le type_ligne)
+                return { color: '#34495e', weight: 2, opacity: 0.5 };
+            }
+        }).addTo(networkLayer);
+        
+    } catch (e) { console.error("Erreur lignes:", e); }
 }
 
 function handleStationClick(nom, lat, lon) {
-    if (!selectedDepart) {
+    if (!selectedDepart) { 
         selectedDepart = { nom, lat, lon };
         document.getElementById('lbl-depart').innerText = nom;
         document.getElementById('lbl-depart').style.color = '#27ae60';
-    } else if (!selectedArrivee && nom !== selectedDepart.nom) {
+    } else { 
         selectedArrivee = { nom, lat, lon };
         document.getElementById('lbl-arrivee').innerText = nom;
         document.getElementById('lbl-arrivee').style.color = '#27ae60';
-    } else {
-        selectedDepart = { nom, lat, lon };
-        selectedArrivee = null;
-        routesLayer.clearLayers(); // Efface les anciennes routes
-        document.getElementById('lbl-depart').innerText = nom;
-        document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
-        document.getElementById('lbl-arrivee').style.color = '#e74c3c';
     }
 }
 
-function updateRameSelector() {
-    const select = document.getElementById('select-rame');
-    select.innerHTML = '<option value="">-- Choisissez une rame au dépôt --</option>';
-    
-    gameState.savedRames.forEach(rame => {
-        const option = document.createElement('option');
-        option.value = rame.id;
-        option.innerText = `${rame.nom} (Max: ${rame.stats.vitesse})`;
-        select.appendChild(option);
-    });
-}
-
-// Fonction asynchrone pour interroger le moteur de routage
 async function planifierTrajet() {
     const rameId = document.getElementById('select-rame').value;
     const time = document.getElementById('time-depart').value;
 
     if (!rameId || !selectedDepart || !selectedArrivee || !time) {
-        return alert("Veuillez remplir tous les champs (Rame, Départ, Arrivée, Heure).");
+        return alert("Veuillez remplir tous les champs !");
     }
 
-    const rame = gameState.savedRames.find(r => r.id === rameId);
-    const vitesseTrain = parseInt(rame.stats.vitesse);
+    const rame = gameState.savedRames.find(r => r.id == rameId);
     
-    // UI Feedback pendant le calcul
-    const btn = document.querySelector('#view-carte .action-btn');
-    btn.innerText = "Calcul du tracé en cours...";
-    btn.disabled = true;
-
     try {
-        // API BRouter avec profil ferroviaire (rail)
-        const brouterUrl = `https://brouter.de/brouter?lonlats=${selectedDepart.lon},${selectedDepart.lat}|${selectedArrivee.lon},${selectedArrivee.lat}&profile=rail&alternativeidx=0&format=geojson`;
+        // BRouter reste notre seul appel externe pour calculer le chemin optimal sur les rails
+        const brouterUrl = `https://brouter.de/brouter?lonlats=${selectedDepart.lon},${selectedDepart.lat}|${selectedArrivee.lon},${selectedArrivee.lat}&profile=rail&format=geojson`;
+        const res = await fetch(brouterUrl);
+        const geo = await res.json();
         
-        const response = await fetch(brouterUrl);
-        const geojson = await response.json();
+        const dist = geo.features[0].properties['track-length'] / 1000;
+        const speedKmh = parseInt(rame.stats.vitesse) * 0.85; // Vitesse pratique
+        const timeSec = (dist / speedKmh) * 3600;
         
-        // Extraction des données de BRouter
-        const properties = geojson.features[0].properties;
-        const coords = geojson.features[0].geometry.coordinates;
-        
-        // Inversion [lon, lat] vers [lat, lon] pour Leaflet
-        const latlngs = coords.map(c => [c[1], c[0]]);
-        
-        // Distance réelle sur les rails
-        const distanceKm = properties['track-length'] / 1000;
-        
-        // Temps estimé par la voie (prend en compte les limitations de vitesse de la ligne)
-        const tempsVoieSecondes = properties['total-time']; 
-        
-        // Temps théorique si le train roulait à sa V-MAX constante
-        const tempsTrainSecondes = (distanceKm / vitesseTrain) * 3600;
-        
-        // La réalité : le train ne peut pas aller plus vite que la voie, et la voie ne peut pas faire aller le train plus vite que son moteur.
-        const tempsFinalSecondes = Math.max(tempsVoieSecondes, tempsTrainSecondes) * 1.1; // +10% de marge (freinage/accélération)
-        
-        // Calcul des Heures
         const departDate = new Date(`1970-01-01T${time}:00`);
-        const arriveeDate = new Date(departDate.getTime() + (tempsFinalSecondes * 1000));
+        const arriveeDate = new Date(departDate.getTime() + (timeSec * 1000));
         const timeArrivee = arriveeDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
-
-        // ALGORITHME DE DÉTECTION DES GARES TRAVERSÉES
-        let stationsTraversees = [];
-        sncfStations.forEach(gare => {
-            if (gare.nom === selectedDepart.nom || gare.nom === selectedArrivee.nom) return;
-            
-            // On vérifie si la gare se trouve à proximité immédiate (env. 2km) d'un point du tracé
-            for(let i = 0; i < latlngs.length; i += 5) { // On check un point sur 5 pour l'optimisation
-                let dLat = Math.abs(gare.lat - latlngs[i][0]);
-                let dLon = Math.abs(gare.lon - latlngs[i][1]);
-                if (dLat < 0.02 && dLon < 0.02) { 
-                    stationsTraversees.push(gare.nom);
-                    break; 
-                }
-            }
-        });
-
-        // Enregistrement
-        if(!gameState.activeRoutes) gameState.activeRoutes = [];
         
-        const routeInfo = {
+        const path = geo.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        
+        // Sauvegarde de l'itinéraire actif
+        gameState.activeRoutes.push({
             rameNom: rame.nom,
             departNom: selectedDepart.nom,
             arriveeNom: selectedArrivee.nom,
             heureDepart: time,
             heureArrivee: timeArrivee,
-            distance: Math.round(distanceKm),
-            stations: stationsTraversees,
-            path: latlngs // Tracé exact
-        };
+            distance: Math.round(dist),
+            path: path
+        });
         
-        gameState.activeRoutes.push(routeInfo);
         saveGame();
         
-        // Tracé et reset UI
-        routesLayer.clearLayers(); // On nettoie avant de tracer la nouvelle
-        L.polyline(latlngs, {color: '#e74c3c', weight: 5, opacity: 0.8}).addTo(routesLayer);
+        // Tracé rouge pour le trajet actif
+        routesLayer.clearLayers();
+        L.polyline(path, {color: '#e74c3c', weight: 4}).addTo(routesLayer);
         
-        selectedDepart = null;
-        selectedArrivee = null;
+        selectedDepart = null; selectedArrivee = null;
         document.getElementById('lbl-depart').innerText = "Cliquez sur une gare";
-        document.getElementById('lbl-depart').style.color = '#e74c3c';
         document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
-        document.getElementById('lbl-arrivee').style.color = '#e74c3c';
         
         renderActiveRoutes();
         
-    } catch(err) {
-        console.error(err);
-        alert("Erreur lors du calcul du tracé. La liaison ferroviaire est peut-être inexistante.");
-    } finally {
-        btn.innerText = "Valider l'itinéraire";
-        btn.disabled = false;
+    } catch (e) {
+        alert("Erreur de routage. Essayez un autre trajet.");
     }
-}
-
-function renderActiveRoutes() {
-    const list = document.getElementById('active-routes-list');
-    list.innerHTML = '';
-
-    if (!gameState.activeRoutes || gameState.activeRoutes.length === 0) {
-        list.innerHTML = '<p style="color: #7f8c8d; font-style: italic;">Aucun train en circulation.</p>';
-        return;
-    }
-
-    // On re-trace toutes les routes enregistrées sur la carte
-    routesLayer.clearLayers();
-
-    gameState.activeRoutes.forEach((route) => {
-        const div = document.createElement('div');
-        div.style.padding = "10px";
-        div.style.borderBottom = "1px solid #eee";
-        div.style.backgroundColor = "#fff";
-        div.style.marginBottom = "5px";
-        div.style.borderRadius = "4px";
-        
-        let stationsHtml = route.stations && route.stations.length > 0 
-            ? `<br><small style="color: #f39c12;">Passage par : ${route.stations.join(', ')}</small>` 
-            : '';
-
-        div.innerHTML = `
-            <strong style="color: #2c3e50;">🚆 ${route.rameNom}</strong><br>
-            <span style="color: #27ae60;">${route.heureDepart}</span> ${route.departNom}<br>
-            <span style="color: #e74c3c;">${route.heureArrivee}</span> ${route.arriveeNom}<br>
-            <small style="color: #7f8c8d;">Voie : ${route.distance} km</small>
-            ${stationsHtml}
-        `;
-        list.appendChild(div);
-        
-        // Tracer la ligne exacte
-        L.polyline(route.path, {color: '#3498db', weight: 4, opacity: 0.7}).addTo(routesLayer);
-    });
 }
