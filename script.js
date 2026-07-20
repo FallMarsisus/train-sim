@@ -436,6 +436,7 @@ function renderActiveRoutes() {
         <div style="background:#f8f9fa; border:1px solid #ddd; border-radius:6px; padding:10px; margin-bottom:10px;">
             <strong>${route.rameNom}</strong><br>
             ${route.departNom} → ${route.arriveeNom}<br>
+            ${(route.intermediateStops && route.intermediateStops.length) ? `Arrêts: ${route.intermediateStops.join(' • ')}<br>` : ''}
             ${route.heureDepart} - ${route.heureArrivee}<br>
             ${route.distance} km
         </div>
@@ -481,6 +482,14 @@ window.onload = initGame;
 let map = null, markersLayer = null, routesLayer = null, networkLayer = null;
 let sncfStations = [];
 let selectedDepart = null, selectedArrivee = null;
+let networkFeatures = [];
+let visibleStationMarkers = new Map();
+let visibleLineLayers = new Map();
+let pendingViewportRender = null;
+let lastViewportKey = '';
+let routePreviewCache = null;
+let intermediateStationSuggestions = [];
+const lineRenderer = (typeof L !== 'undefined' && typeof L.canvas === 'function') ? L.canvas({ padding: 0.2 }) : null;
 
 function initMap() {
     if (typeof L === 'undefined') {
@@ -490,6 +499,7 @@ function initMap() {
 
     if (map) { 
         map.invalidateSize(); 
+        scheduleViewportRender();
         return; 
     }
     
@@ -502,6 +512,8 @@ function initMap() {
     networkLayer = L.layerGroup().addTo(map);
     routesLayer = L.layerGroup().addTo(map);
     markersLayer = L.layerGroup().addTo(map);
+
+    map.on('moveend zoomend', scheduleViewportRender);
     
     fetchGaresLocales();
     fetchLignesLocales();
@@ -512,22 +524,17 @@ async function fetchGaresLocales() {
         const response = await fetch('gares-de-voyageurs.json');
         const data = await response.json();
         
-        data.forEach(gare => {
+        sncfStations = [];
+        data.forEach((gare, index) => {
             if (gare.position_geographique) {
                 const lat = gare.position_geographique.lat;
                 const lon = gare.position_geographique.lon;
                 const nom = gare.nom;
-                
-                const marker = L.marker([lat, lon], { 
-                    icon: L.divIcon({ html: '🚉', className: 'station-icon', iconSize: [15, 15] }) 
-                }).addTo(markersLayer);
-                
-                marker.bindTooltip(nom);
-                marker.on('click', () => handleStationClick(nom, lat, lon));
-                
-                sncfStations.push({ nom, lat, lon });
+
+                sncfStations.push({ id: gare.id || `station_${index}`, nom, lat, lon });
             }
         });
+        scheduleViewportRender();
     } catch (e) { console.error("Erreur gares:", e); }
 }
 
@@ -535,26 +542,289 @@ async function fetchLignesLocales() {
     try {
         const response = await fetch('lignes_sncf.json');
         const geojsonData = await response.json();
-        
-        L.geoJSON(geojsonData, {
-            style: function () {
-                return { color: '#34495e', weight: 2, opacity: 0.5 };
-            }
-        }).addTo(networkLayer);
+        networkFeatures = (geojsonData.features || []).map((feature, index) => {
+            const coordinates = feature?.geometry?.coordinates || [];
+            const bounds = computeFeatureBounds(coordinates);
+            return {
+                id: feature.id || `line_${index}`,
+                coordinates,
+                bounds,
+                isLGV: isLGVFeature(feature)
+            };
+        });
+
+        scheduleViewportRender();
         
     } catch (e) { console.error("Erreur lignes:", e); }
 }
 
 function handleStationClick(nom, lat, lon) {
-    if (!selectedDepart) { 
+    if (!selectedDepart || (selectedDepart && selectedArrivee)) { 
         selectedDepart = { nom, lat, lon };
+        selectedArrivee = null;
         document.getElementById('lbl-depart').innerText = nom;
         document.getElementById('lbl-depart').style.color = '#27ae60';
+        document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
+        document.getElementById('lbl-arrivee').style.color = '#e74c3c';
+        resetIntermediateSelections();
     } else { 
         selectedArrivee = { nom, lat, lon };
         document.getElementById('lbl-arrivee').innerText = nom;
         document.getElementById('lbl-arrivee').style.color = '#27ae60';
+        prepareIntermediateSuggestions();
     }
+}
+
+function isLGVFeature(feature) {
+    const lineType = String(feature?.properties?.type_ligne || '').toLowerCase();
+    return lineType.includes('lgv') || lineType.includes('grande vitesse') || lineType.includes('high speed');
+}
+
+function computeFeatureBounds(coordinates) {
+    let minLat = Infinity, minLon = Infinity, maxLat = -Infinity, maxLon = -Infinity;
+    coordinates.forEach(coord => {
+        const [lon, lat] = coord;
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+    });
+    return { minLat, minLon, maxLat, maxLon };
+}
+
+function featureIntersectsBounds(featureBounds, mapBounds) {
+    const south = mapBounds.getSouth();
+    const north = mapBounds.getNorth();
+    const west = mapBounds.getWest();
+    const east = mapBounds.getEast();
+    return !(featureBounds.maxLat < south || featureBounds.minLat > north || featureBounds.maxLon < west || featureBounds.minLon > east);
+}
+
+function buildViewportKey(bounds, zoom) {
+    const precision = zoom >= 9 ? 100 : 20;
+    const round = value => Math.round(value * precision) / precision;
+    return [
+        zoom,
+        round(bounds.getSouth()),
+        round(bounds.getWest()),
+        round(bounds.getNorth()),
+        round(bounds.getEast())
+    ].join(':');
+}
+
+function scheduleViewportRender() {
+    if (!map) return;
+    if (pendingViewportRender) return;
+    pendingViewportRender = window.requestAnimationFrame(() => {
+        pendingViewportRender = null;
+        renderVisibleMapData();
+    });
+}
+
+function renderVisibleMapData() {
+    // Evite les redraw complets : ne met à jour que la portion réellement visible.
+    const bounds = map.getBounds().pad(0.2);
+    const zoom = map.getZoom();
+    const viewportKey = buildViewportKey(bounds, zoom);
+    if (viewportKey === lastViewportKey) return;
+    lastViewportKey = viewportKey;
+
+    renderVisibleLines(bounds);
+    renderVisibleStations(bounds);
+}
+
+function renderVisibleLines(bounds) {
+    const visibleIds = new Set();
+    networkFeatures.forEach(feature => {
+        if (!feature.bounds || !featureIntersectsBounds(feature.bounds, bounds)) return;
+        visibleIds.add(feature.id);
+        if (visibleLineLayers.has(feature.id)) return;
+
+        const latLngs = feature.coordinates.map(c => [c[1], c[0]]);
+        const line = L.polyline(latLngs, {
+            color: feature.isLGV ? '#8e44ad' : '#5d6d7e',
+            weight: feature.isLGV ? 3 : 2,
+            opacity: 0.65,
+            renderer: lineRenderer || undefined
+        });
+        line.addTo(networkLayer);
+        visibleLineLayers.set(feature.id, line);
+    });
+
+    visibleLineLayers.forEach((layer, id) => {
+        if (visibleIds.has(id)) return;
+        networkLayer.removeLayer(layer);
+        visibleLineLayers.delete(id);
+    });
+}
+
+function renderVisibleStations(bounds) {
+    const visibleIds = new Set();
+
+    sncfStations.forEach(station => {
+        if (!bounds.contains([station.lat, station.lon])) return;
+        visibleIds.add(station.id);
+        if (visibleStationMarkers.has(station.id)) return;
+
+        const marker = L.marker([station.lat, station.lon], {
+            icon: L.divIcon({ html: '🚉', className: 'station-icon', iconSize: [15, 15] })
+        }).addTo(markersLayer);
+
+        marker.bindTooltip(station.nom);
+        marker.on('click', () => handleStationClick(station.nom, station.lat, station.lon));
+        visibleStationMarkers.set(station.id, marker);
+    });
+
+    visibleStationMarkers.forEach((marker, id) => {
+        if (visibleIds.has(id)) return;
+        markersLayer.removeLayer(marker);
+        visibleStationMarkers.delete(id);
+    });
+}
+
+function resetIntermediateSelections() {
+    routePreviewCache = null;
+    intermediateStationSuggestions = [];
+    renderIntermediateSuggestions();
+}
+
+function renderIntermediateSuggestions(message = null) {
+    const box = document.getElementById('intermediate-stops-box');
+    const hint = document.getElementById('intermediate-stops-hint');
+    const list = document.getElementById('intermediate-stops-list');
+    if (!box || !hint || !list) return;
+
+    if (!selectedDepart || !selectedArrivee) {
+        box.style.display = 'none';
+        list.innerHTML = '';
+        return;
+    }
+
+    box.style.display = 'block';
+    list.innerHTML = '';
+
+    if (message) {
+        hint.innerText = message;
+        return;
+    }
+
+    if (intermediateStationSuggestions.length === 0) {
+        hint.innerText = "Aucun arrêt intermédiaire pertinent détecté pour ce trajet.";
+        return;
+    }
+
+    hint.innerText = "Sélectionnez les arrêts utiles pour cette liaison.";
+    intermediateStationSuggestions.forEach((station, index) => {
+        const label = document.createElement('label');
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.gap = '6px';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `intermediate-stop-${index}`;
+        checkbox.dataset.stopId = station.id;
+
+        const stationText = document.createElement('span');
+        stationText.textContent = station.nom;
+
+        label.appendChild(checkbox);
+        label.appendChild(stationText);
+        list.appendChild(label);
+    });
+}
+
+async function prepareIntermediateSuggestions() {
+    if (!selectedDepart || !selectedArrivee) return;
+    renderIntermediateSuggestions("Analyse du trajet en cours...");
+
+    const routeKey = `${selectedDepart.nom}|${selectedArrivee.nom}`;
+    if (routePreviewCache && routePreviewCache.key === routeKey) {
+        intermediateStationSuggestions = routePreviewCache.suggestions;
+        renderIntermediateSuggestions();
+        return;
+    }
+
+    try {
+        const brouterUrl = `https://brouter.de/brouter?lonlats=${selectedDepart.lon},${selectedDepart.lat}|${selectedArrivee.lon},${selectedArrivee.lat}&profile=rail&format=geojson`;
+        const res = await fetch(brouterUrl);
+        const geo = await res.json();
+        const baseRoute = geo?.features?.[0];
+        const routeCoordinates = baseRoute?.geometry?.coordinates || [];
+
+        intermediateStationSuggestions = computeIntermediateStations(routeCoordinates, selectedDepart, selectedArrivee);
+        routePreviewCache = { key: routeKey, suggestions: intermediateStationSuggestions };
+        renderIntermediateSuggestions();
+    } catch (e) {
+        console.error("Erreur suggestions:", e);
+        intermediateStationSuggestions = [];
+        renderIntermediateSuggestions("Impossible de charger les arrêts intermédiaires pour ce trajet.");
+    }
+}
+
+function computeIntermediateStations(routeCoordinates, depart, arrivee) {
+    if (!routeCoordinates || routeCoordinates.length < 3) return [];
+
+    // On échantillonne la géométrie pour trouver des gares proches du tracé sans coût excessif.
+    const maxStops = 7;
+    const pointStep = Math.max(1, Math.floor(routeCoordinates.length / 250));
+    const sampled = [];
+    for (let i = 0; i < routeCoordinates.length; i += pointStep) sampled.push({ coord: routeCoordinates[i], index: i });
+    if (sampled[sampled.length - 1].index !== routeCoordinates.length - 1) {
+        sampled.push({ coord: routeCoordinates[routeCoordinates.length - 1], index: routeCoordinates.length - 1 });
+    }
+
+    const routeLength = routeCoordinates.length - 1;
+    const thresholdKm = 6;
+    const candidates = [];
+
+    sncfStations.forEach(station => {
+        if (station.nom === depart.nom || station.nom === arrivee.nom) return;
+
+        let bestDistance = Infinity;
+        let bestIndex = -1;
+
+        sampled.forEach(point => {
+            const [lon, lat] = point.coord;
+            const dist = approxKmDistance(station.lat, station.lon, lat, lon);
+            if (dist < bestDistance) {
+                bestDistance = dist;
+                bestIndex = point.index;
+            }
+        });
+
+        if (bestDistance > thresholdKm || bestIndex <= 0 || bestIndex >= routeLength) return;
+        const progress = bestIndex / routeLength;
+        if (progress < 0.08 || progress > 0.92) return;
+
+        candidates.push({ station, progress, distanceToPath: bestDistance });
+    });
+
+    candidates.sort((a, b) => (a.progress - b.progress) || (a.distanceToPath - b.distanceToPath));
+
+    const selected = [];
+    candidates.forEach(candidate => {
+        if (selected.length >= maxStops) return;
+        const tooClose = selected.some(existing => Math.abs(existing.progress - candidate.progress) < 0.09);
+        if (!tooClose) selected.push(candidate);
+    });
+
+    return selected.map(item => item.station);
+}
+
+function approxKmDistance(lat1, lon1, lat2, lon2) {
+    const avgLat = (lat1 + lat2) * 0.5 * Math.PI / 180;
+    const kmPerDegLat = 111.32;
+    const kmPerDegLon = 111.32 * Math.cos(avgLat);
+    const dLat = (lat1 - lat2) * kmPerDegLat;
+    const dLon = (lon1 - lon2) * kmPerDegLon;
+    return Math.sqrt((dLat * dLat) + (dLon * dLon));
+}
+
+function getSelectedIntermediateStops() {
+    const checkedInputs = document.querySelectorAll('#intermediate-stops-list input[type="checkbox"]:checked');
+    const selectedIds = Array.from(checkedInputs).map(input => input.dataset.stopId);
+    return intermediateStationSuggestions.filter(station => selectedIds.includes(String(station.id)));
 }
 
 async function planifierTrajet() {
@@ -567,9 +837,13 @@ async function planifierTrajet() {
 
     const rame = gameState.savedRames.find(r => r.id == rameId);
     if (!rame) return;
+
+    const selectedStops = getSelectedIntermediateStops();
+    const routeStations = [selectedDepart, ...selectedStops, selectedArrivee];
+    const lonLatPath = routeStations.map(station => `${station.lon},${station.lat}`).join('|');
     
     try {
-        const brouterUrl = `https://brouter.de/brouter?lonlats=${selectedDepart.lon},${selectedDepart.lat}|${selectedArrivee.lon},${selectedArrivee.lat}&profile=rail&format=geojson`;
+        const brouterUrl = `https://brouter.de/brouter?lonlats=${lonLatPath}&profile=rail&format=geojson`;
         const res = await fetch(brouterUrl);
         const geo = await res.json();
         
@@ -590,6 +864,7 @@ async function planifierTrajet() {
             heureDepart: time,
             heureArrivee: timeArrivee,
             distance: Math.round(dist),
+            intermediateStops: selectedStops.map(station => station.nom),
             path: path
         });
         
@@ -601,6 +876,7 @@ async function planifierTrajet() {
         selectedDepart = null; selectedArrivee = null;
         document.getElementById('lbl-depart').innerText = "Cliquez sur une gare";
         document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
+        resetIntermediateSelections();
         
         renderActiveRoutes();
         
