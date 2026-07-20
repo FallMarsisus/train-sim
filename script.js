@@ -7,7 +7,8 @@ let gameState = {
     money: 15000000,
     inventory: [], // Matériel possédé, non assigné
     activeComposition: [], // Sur la voie d'assemblage
-    savedRames: [] // Rames finalisées
+    savedRames: [], // Rames finalisées
+    activeRoutes: []
 };
 
 // --- GESTION DES ONGLETS ---
@@ -20,6 +21,12 @@ function switchTab(tabId) {
     
     if (tabId === 'inventaire') updateInventoryUI();
     if (tabId === 'depot') renderSavedRames();
+    if (tabId === 'carte') {
+        initMap();
+        populateRameSelect();
+        renderActiveRoutes();
+        setTimeout(() => map && map.invalidateSize(), 150);
+    }
 }
 
 // --- INITIALISATION ---
@@ -40,6 +47,7 @@ async function initGame() {
             gameState.money = loaded.money || 15000000;
             gameState.inventory = loaded.inventory || [];
             gameState.savedRames = loaded.savedRames || [];
+            gameState.activeRoutes = loaded.activeRoutes || [];
             if (loaded.shopSelection && loaded.shopSelection.length > 0) {
                 shopSelection = loaded.shopSelection;
             } else {
@@ -69,25 +77,21 @@ function parseLogicalStats(train) {
         train.caracteristiques.forEach(attr => {
             let text = attr.toLowerCase();
             
-            // 1. Vitesse
             let speedMatch = text.match(/(\d+)\s*km\/h/);
             if (speedMatch) speed = parseInt(speedMatch[1]);
             
-            // 2. Capacité 1ère classe
             let class1Regex = /(?:1ère|1ere)\s*:\s*(\d+)/gi;
             let match1;
             while ((match1 = class1Regex.exec(text)) !== null) {
                 capacity1 += parseInt(match1[1]);
             }
 
-            // 3. Capacité 2nde classe
             let class2Regex = /(?:2nde|2eme|2ème|2nd)\s*:\s*(\d+)/gi;
             let match2;
             while ((match2 = class2Regex.exec(text)) !== null) {
                 capacity2 += parseInt(match2[1]);
             }
 
-            // 4. Capacité générique (seulement si aucune classe trouvée)
             if (capacity1 === 0 && capacity2 === 0) {
                 let placesRegex = /(?:places?\s*:\s*(\d+))|(?:(\d+)\s*places?)/gi;
                 let matchGen;
@@ -96,7 +100,6 @@ function parseLogicalStats(train) {
                 }
             }
 
-            // 5. Gabarit
             if (text.includes('britannique')) gabarit = 'Britannique';
             if (text.includes('continental')) gabarit = 'Continental';
         });
@@ -133,7 +136,6 @@ function getRandomTrains(type, count) {
 }
 
 function generateShop() {
-    // Génère le shop SANS le fret
     const locos = getRandomTrains('loco', 6);
     const autorails = getRandomTrains('autorail', 6);
     const voyageurs = getRandomTrains('voyageur', 12);
@@ -168,7 +170,6 @@ function renderShop() {
             card.className = 'card';
             const canAfford = gameState.money >= train.logicalPrice;
             
-            // Formatage propre des places
             let placesStr = [];
             if (train.capacity1 > 0) placesStr.push(`1ère: ${train.capacity1}`);
             if (train.capacity2 > 0) placesStr.push(`2nde: ${train.capacity2}`);
@@ -308,7 +309,6 @@ function updateCompositionUI() {
     document.getElementById('comp-cost').innerText = totalCost.toLocaleString() + " €";
     document.getElementById('comp-speed').innerText = Math.min(...speeds) + " km/h";
     
-    // Affichage formaté des places pour l'atelier
     let placesStr = [];
     if (cap1 > 0) placesStr.push(`1ère: ${cap1}`);
     if (cap2 > 0) placesStr.push(`2nde: ${cap2}`);
@@ -319,7 +319,6 @@ function updateCompositionUI() {
     let mainGabarit = gabarits.size > 0 ? Array.from(gabarits).join(' & ') : "Universel";
     document.getElementById('comp-gabarit').innerText = mainGabarit;
 
-    // VALIDATION LOGIQUE
     logicBox.style.display = 'block';
     logicBox.className = 'logic-alert'; 
     let canSave = true;
@@ -412,12 +411,44 @@ function renderSavedRames() {
     });
 }
 
+function populateRameSelect() {
+    const select = document.getElementById('select-rame');
+    if (!select) return;
+    select.innerHTML = '<option value="">-- Choisissez une rame au dépôt --</option>';
+    gameState.savedRames.forEach(rame => {
+        const opt = document.createElement('option');
+        opt.value = rame.id;
+        opt.textContent = rame.nom;
+        select.appendChild(opt);
+    });
+}
+
+function renderActiveRoutes() {
+    const container = document.getElementById('active-routes-list');
+    if (!container) return;
+
+    if (!gameState.activeRoutes || gameState.activeRoutes.length === 0) {
+        container.innerHTML = '<p style="color:#7f8c8d; font-style: italic;">Aucun train en circulation.</p>';
+        return;
+    }
+
+    container.innerHTML = gameState.activeRoutes.map(route => `
+        <div style="background:#f8f9fa; border:1px solid #ddd; border-radius:6px; padding:10px; margin-bottom:10px;">
+            <strong>${route.rameNom}</strong><br>
+            ${route.departNom} → ${route.arriveeNom}<br>
+            ${route.heureDepart} - ${route.heureArrivee}<br>
+            ${route.distance} km
+        </div>
+    `).join('');
+}
+
 // --- SYSTÈME DE SAUVEGARDE GLOBALE ---
 function saveGame() {
     let stateToSave = {
         money: gameState.money,
         inventory: gameState.inventory,
         savedRames: gameState.savedRames,
+        activeRoutes: gameState.activeRoutes,
         shopSelection: shopSelection
     };
     localStorage.setItem('myTrainEmpireSavePro', JSON.stringify(stateToSave));
@@ -445,43 +476,47 @@ function importGameData(event) {
 }
 
 window.onload = initGame;
+
 // --- CARTE & ROUTAGE ---
 let map = null, markersLayer = null, routesLayer = null, networkLayer = null;
 let sncfStations = [];
 let selectedDepart = null, selectedArrivee = null;
 
 function initMap() {
-    if (map) { map.invalidateSize(); return; }
+    if (typeof L === 'undefined') {
+        console.error('Leaflet non chargé');
+        return;
+    }
+
+    if (map) { 
+        map.invalidateSize(); 
+        return; 
+    }
     
-    // Initialisation de la carte centrée sur la France
     map = L.map('map').setView([46.6, 1.8], 6);
     
-    // Fond de carte clair et épuré
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { 
         attribution: '© Carto, OpenStreetMap contributors' 
     }).addTo(map);
     
-    // Initialisation des calques (l'ordre est important pour la superposition)
-    networkLayer = L.layerGroup().addTo(map); // Les rails en dessous
-    routesLayer = L.layerGroup().addTo(map);  // Les trajets calculés au milieu
-    markersLayer = L.layerGroup().addTo(map); // Les gares au-dessus
+    networkLayer = L.layerGroup().addTo(map);
+    routesLayer = L.layerGroup().addTo(map);
+    markersLayer = L.layerGroup().addTo(map);
     
-    // Chargement des fichiers de données locaux
     fetchGaresLocales();
     fetchLignesLocales();
 }
 
-// Chargement des gares
 async function fetchGaresLocales() {
     try {
         const response = await fetch('gares-de-voyageurs.json');
-        const data = await response.json(); //
+        const data = await response.json();
         
         data.forEach(gare => {
             if (gare.position_geographique) {
-                const lat = gare.position_geographique.lat; //[cite: 2]
-                const lon = gare.position_geographique.lon; //[cite: 2]
-                const nom = gare.nom; //[cite: 2]
+                const lat = gare.position_geographique.lat;
+                const lon = gare.position_geographique.lon;
+                const nom = gare.nom;
                 
                 const marker = L.marker([lat, lon], { 
                     icon: L.divIcon({ html: '🚉', className: 'station-icon', iconSize: [15, 15] }) 
@@ -496,16 +531,13 @@ async function fetchGaresLocales() {
     } catch (e) { console.error("Erreur gares:", e); }
 }
 
-// Chargement du réseau ferré
 async function fetchLignesLocales() {
     try {
         const response = await fetch('lignes_sncf.json');
-        const geojsonData = await response.json(); //
+        const geojsonData = await response.json();
         
-        // Leaflet dessine automatiquement les tracés LineString du GeoJSON
         L.geoJSON(geojsonData, {
-            style: function (feature) { //[cite: 3]
-                // Style par défaut du réseau (tu pourras l'adapter si tu ajoutes le type_ligne)
+            style: function () {
                 return { color: '#34495e', weight: 2, opacity: 0.5 };
             }
         }).addTo(networkLayer);
@@ -534,15 +566,15 @@ async function planifierTrajet() {
     }
 
     const rame = gameState.savedRames.find(r => r.id == rameId);
+    if (!rame) return;
     
     try {
-        // BRouter reste notre seul appel externe pour calculer le chemin optimal sur les rails
         const brouterUrl = `https://brouter.de/brouter?lonlats=${selectedDepart.lon},${selectedDepart.lat}|${selectedArrivee.lon},${selectedArrivee.lat}&profile=rail&format=geojson`;
         const res = await fetch(brouterUrl);
         const geo = await res.json();
         
         const dist = geo.features[0].properties['track-length'] / 1000;
-        const speedKmh = parseInt(rame.stats.vitesse) * 0.85; // Vitesse pratique
+        const speedKmh = parseInt(rame.stats.vitesse) * 0.85;
         const timeSec = (dist / speedKmh) * 3600;
         
         const departDate = new Date(`1970-01-01T${time}:00`);
@@ -551,7 +583,6 @@ async function planifierTrajet() {
         
         const path = geo.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
         
-        // Sauvegarde de l'itinéraire actif
         gameState.activeRoutes.push({
             rameNom: rame.nom,
             departNom: selectedDepart.nom,
@@ -564,7 +595,6 @@ async function planifierTrajet() {
         
         saveGame();
         
-        // Tracé rouge pour le trajet actif
         routesLayer.clearLayers();
         L.polyline(path, {color: '#e74c3c', weight: 4}).addTo(routesLayer);
         
