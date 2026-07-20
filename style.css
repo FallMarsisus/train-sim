@@ -66,3 +66,12 @@ nav { background: #34495e; padding: 0 20px; display: flex; box-shadow: 0 2px 5px
 .rame-visualizer { display: flex; gap: 2px; overflow-x: auto; padding: 10px 0; background: #f8f9fa; border-radius: 4px; align-items: center; padding-left: 10px; }
 .rame-visualizer img { max-height: 35px; object-fit: contain; }
 .coupler { font-size: 0.8em; color: #95a5a6; padding: 0 2px; }
+
+/* Ajoute ça à la fin de style.css */
+.station-icon {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    text-align: center;
+    line-height: 20px;
+}

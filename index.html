@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Train-Empire Studio Pro</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </head>
 <body>
 
@@ -28,6 +30,7 @@
         <button class="tab-btn active" onclick="switchTab('boutique')">1. Concessionnaire (Boutique)</button>
         <button class="tab-btn" onclick="switchTab('inventaire')">2. Mon Inventaire & Atelier</button>
         <button class="tab-btn" onclick="switchTab('depot')">3. Rames Actives (Dépôt)</button>
+        <button class="tab-btn" onclick="switchTab('carte')">4. Carte & Itinéraires</button>
     </nav>
 
     <div class="main-container">
@@ -94,6 +97,48 @@
                 </div>
             </div>
         </div>
+
+        <!-- ================= ONGLET 4 : CARTE ================= -->
+<div id="view-carte" class="view-section">
+    <div class="layout-split">
+        <!-- Panneau de Contrôle des Trajets -->
+        <div class="panel" style="flex: 0 0 350px;">
+            <h2>🗺️ Centre de Contrôle</h2>
+            <p class="subtitle">Assignez vos rames sur le réseau.</p>
+            
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 15px;">
+                <h4 style="margin-top: 0; color: #3498db;">Créer une Liaison</h4>
+                
+                <label style="font-size: 0.85em; font-weight: bold;">Rame disponible :</label>
+                <select id="select-rame" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px;">
+                    <option value="">-- Choisissez une rame au dépôt --</option>
+                </select>
+
+                <div style="font-size: 0.9em; margin-bottom: 5px;">
+                    <strong>Départ :</strong> <span id="lbl-depart" style="color: #e74c3c;">Cliquez sur une gare</span>
+                </div>
+                <div style="font-size: 0.9em; margin-bottom: 15px;">
+                    <strong>Arrivée :</strong> <span id="lbl-arrivee" style="color: #e74c3c;">Cliquez sur une gare</span>
+                </div>
+
+                <label style="font-size: 0.85em; font-weight: bold;">Heure de départ :</label>
+                <input type="time" id="time-depart" style="width: 100%; padding: 8px; margin-bottom: 15px; border-radius: 4px;">
+
+                <button class="action-btn success" style="width: 100%;" onclick="planifierTrajet()">Valider l'itinéraire</button>
+            </div>
+
+            <h4 style="color: #2c3e50;">Circulations Actives</h4>
+            <div id="active-routes-list" style="max-height: 300px; overflow-y: auto; font-size: 0.9em;">
+                <p style="color: #7f8c8d; font-style: italic;">Aucun train en circulation.</p>
+            </div>
+        </div>
+
+        <!-- La Carte Interactive -->
+        <div class="panel" style="flex: 1; padding: 0; overflow: hidden; position: relative;">
+            <div id="map" style="width: 100%; height: 600px; border-radius: 8px;"></div>
+        </div>
+    </div>
+</div>
 
     </div>
 

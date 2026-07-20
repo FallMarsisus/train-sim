@@ -445,3 +445,212 @@ function importGameData(event) {
 }
 
 window.onload = initGame;
+
+// --- MODULE CARTE ET ROUTAGE ---
+let map = null;
+let markersLayer = null;
+let routesLayer = null;
+
+let selectedDepart = null;
+let selectedArrivee = null;
+
+// On intercepte le changement d'onglet pour initialiser la carte uniquement quand elle est visible
+const originalSwitchTab = switchTab;
+switchTab = function(tabId) {
+    originalSwitchTab(tabId);
+    
+    if (tabId === 'carte') {
+        initMap();
+        updateRameSelector();
+        renderActiveRoutes();
+    }
+};
+
+function initMap() {
+    if (map !== null) {
+        map.invalidateSize();
+        return;
+    }
+
+    // Création de la carte centrée sur la France
+    map = L.map('map').setView([46.603354, 1.888334], 6);
+
+    // 1. Couche de base (Fond de carte clair pour bien voir les rails)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap contributors, © CARTO',
+        maxZoom: 19
+    }).addTo(map);
+
+    // 2. LA MAGIE : Couche OpenRailwayMap superposée !
+    L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
+        attribution: 'Données ferroviaires © OpenRailwayMap',
+        maxZoom: 19,
+        opacity: 0.8 // Légèrement transparent pour voir les villes en dessous
+    }).addTo(map);
+
+    markersLayer = L.layerGroup().addTo(map);
+    routesLayer = L.layerGroup().addTo(map);
+
+    fetchGaresSNCF();
+}
+
+async function fetchGaresSNCF() {
+    // API Open Data SNCF - On récupère les Gares de Voyageurs (Limité à 100 pour la fluidité de l'exemple, trié par importance)
+    // Le segment "TGV" dans les filtres permet de cibler les grandes gares
+    const url = "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/referentiel-gares-voyageurs/records?limit=100&refine=segment_drg%3A%22a%22";
+    
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        data.results.forEach(gare => {
+            // Certaines gares n'ont pas de coordonnées dans l'API, on les saute
+            if (!gare.wgs_84) return;
+            
+            const lat = gare.wgs_84.lat;
+            const lon = gare.wgs_84.lon;
+            const nomGare = gare.gare_alias_libelle_noncontraint;
+
+            // Icône personnalisée pour les gares
+            const stationIcon = L.divIcon({
+                html: '🚉',
+                className: 'station-icon',
+                iconSize: [20, 20]
+            });
+
+            const marker = L.marker([lat, lon], { icon: stationIcon }).addTo(markersLayer);
+            marker.bindTooltip(nomGare);
+            
+            marker.on('click', () => handleStationClick(nomGare, lat, lon));
+        });
+    } catch (e) {
+        console.error("Erreur de récupération des gares:", e);
+    }
+}
+
+function handleStationClick(nom, lat, lon) {
+    if (!selectedDepart) {
+        selectedDepart = { nom, lat, lon };
+        document.getElementById('lbl-depart').innerText = nom;
+        document.getElementById('lbl-depart').style.color = '#27ae60';
+    } else if (!selectedArrivee && nom !== selectedDepart.nom) {
+        selectedArrivee = { nom, lat, lon };
+        document.getElementById('lbl-arrivee').innerText = nom;
+        document.getElementById('lbl-arrivee').style.color = '#27ae60';
+        
+        // Trace une ligne de prévisualisation (vol d'oiseau)
+        const latlngs = [
+            [selectedDepart.lat, selectedDepart.lon],
+            [selectedArrivee.lat, selectedArrivee.lon]
+        ];
+        L.polyline(latlngs, {color: '#f39c12', dashArray: '5, 10'}).addTo(routesLayer);
+    } else {
+        // Reset si on clique une 3ème fois
+        selectedDepart = { nom, lat, lon };
+        selectedArrivee = null;
+        routesLayer.clearLayers();
+        document.getElementById('lbl-depart').innerText = nom;
+        document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
+        document.getElementById('lbl-arrivee').style.color = '#e74c3c';
+    }
+}
+
+function updateRameSelector() {
+    const select = document.getElementById('select-rame');
+    select.innerHTML = '<option value="">-- Choisissez une rame au dépôt --</option>';
+    
+    gameState.savedRames.forEach(rame => {
+        // On pourrait vérifier si la rame n'est pas DÉJÀ affectée
+        const option = document.createElement('option');
+        option.value = rame.id;
+        option.innerText = rame.nom + " (" + rame.stats.vitesse + ")";
+        select.appendChild(option);
+    });
+}
+
+function planifierTrajet() {
+    const rameId = document.getElementById('select-rame').value;
+    const time = document.getElementById('time-depart').value;
+
+    if (!rameId || !selectedDepart || !selectedArrivee || !time) {
+        alert("Veuillez remplir tous les champs (Rame, Départ, Arrivée, Heure).");
+        return;
+    }
+
+    const rame = gameState.savedRames.find(r => r.id === rameId);
+
+    // Calcul de la distance à vol d'oiseau (en km)
+    const distance = map.distance(
+        [selectedDepart.lat, selectedDepart.lon], 
+        [selectedArrivee.lat, selectedArrivee.lon]
+    ) / 1000;
+
+    // Calcul du temps de trajet estimé (Vitesse max de la rame * 0.7 pour simuler l'accélération/freinage)
+    const speedKmh = parseInt(rame.stats.vitesse) * 0.7;
+    const dureeHeures = distance / speedKmh;
+    
+    const departDate = new Date(`1970-01-01T${time}:00`);
+    const arriveeDate = new Date(departDate.getTime() + (dureeHeures * 60 * 60 * 1000));
+    
+    const timeArrivee = arriveeDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
+
+    // Enregistrement dans le State (à rajouter dans gameState pour les sauvegardes futures)
+    if(!gameState.activeRoutes) gameState.activeRoutes = [];
+    
+    const routeInfo = {
+        rameNom: rame.nom,
+        departNom: selectedDepart.nom,
+        arriveeNom: selectedArrivee.nom,
+        heureDepart: time,
+        heureArrivee: timeArrivee,
+        distance: Math.round(distance),
+        path: [
+            [selectedDepart.lat, selectedDepart.lon],
+            [selectedArrivee.lat, selectedArrivee.lon]
+        ]
+    };
+    
+    gameState.activeRoutes.push(routeInfo);
+    saveGame();
+    
+    // Trace la ligne définitive en bleu
+    L.polyline(routeInfo.path, {color: '#3498db', weight: 4}).addTo(routesLayer);
+    
+    // Reset l'UI
+    selectedDepart = null;
+    selectedArrivee = null;
+    document.getElementById('lbl-depart').innerText = "Cliquez sur une gare";
+    document.getElementById('lbl-depart').style.color = '#e74c3c';
+    document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
+    document.getElementById('lbl-arrivee').style.color = '#e74c3c';
+    document.getElementById('select-rame').value = "";
+    
+    renderActiveRoutes();
+    alert(`Trajet validé ! Arrivée estimée à ${timeArrivee}.`);
+}
+
+function renderActiveRoutes() {
+    const list = document.getElementById('active-routes-list');
+    list.innerHTML = '';
+
+    if (!gameState.activeRoutes || gameState.activeRoutes.length === 0) {
+        list.innerHTML = '<p style="color: #7f8c8d; font-style: italic;">Aucun train en circulation.</p>';
+        return;
+    }
+
+    gameState.activeRoutes.forEach((route, index) => {
+        const div = document.createElement('div');
+        div.style.padding = "10px";
+        div.style.borderBottom = "1px solid #eee";
+        div.innerHTML = `
+            <strong style="color: #2c3e50;">🚆 ${route.rameNom}</strong><br>
+            <span style="color: #27ae60;">${route.heureDepart}</span> ${route.departNom}<br>
+            <span style="color: #e74c3c;">${route.heureArrivee}</span> ${route.arriveeNom}<br>
+            <small style="color: #7f8c8d;">Distance : ${route.distance} km</small>
+        `;
+        list.appendChild(div);
+        
+        // Retracer la ligne au chargement de l'onglet si besoin
+        L.polyline(route.path, {color: '#3498db', weight: 4}).addTo(routesLayer);
+    });
+}
