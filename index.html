@@ -102,27 +102,33 @@
 <div id="view-carte" class="view-section">
     <div class="layout-split">
         <!-- Panneau de Contrôle des Trajets -->
-        <div class="panel" style="flex: 0 0 350px;">
-            <h2>🗺️ Centre de Contrôle</h2>
+        <div class="panel rail-panel map-control-panel">
+            <h2>🗺️ Poste d'Aiguillage</h2>
             <p class="subtitle">Assignez vos rames sur le réseau.</p>
             
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 15px;">
-                <h4 style="margin-top: 0; color: #3498db;">Créer une Liaison</h4>
+            <div class="map-form-card">
+                <h4>Créer une Liaison</h4>
                 
-                <label style="font-size: 0.85em; font-weight: bold;">Rame disponible :</label>
-                <select id="select-rame" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px;">
+                <label class="field-label">Rame disponible :</label>
+                <select id="select-rame" class="field-input">
                     <option value="">-- Choisissez une rame au dépôt --</option>
                 </select>
 
-                <div style="font-size: 0.9em; margin-bottom: 5px;">
+                <div class="station-choice-line">
                     <strong>Départ :</strong> <span id="lbl-depart" style="color: #e74c3c;">Cliquez sur une gare</span>
                 </div>
-                <div style="font-size: 0.9em; margin-bottom: 15px;">
+                <div class="station-choice-line">
                     <strong>Arrivée :</strong> <span id="lbl-arrivee" style="color: #e74c3c;">Cliquez sur une gare</span>
                 </div>
 
-                <label style="font-size: 0.85em; font-weight: bold;">Heure de départ :</label>
-                <input type="time" id="time-depart" style="width: 100%; padding: 8px; margin-bottom: 15px; border-radius: 4px;">
+                <div id="intermediate-stops-box" class="intermediate-stops-box" style="display:none;">
+                    <label class="field-label">Gares intermédiaires suggérées :</label>
+                    <div id="intermediate-stops-hint" class="small-hint">Sélectionnez les arrêts utiles pour cette liaison.</div>
+                    <div id="intermediate-stops-list" class="intermediate-stops-list"></div>
+                </div>
+
+                <label class="field-label">Heure de départ :</label>
+                <input type="time" id="time-depart" class="field-input">
 
                 <button class="action-btn success" style="width: 100%;" onclick="planifierTrajet()">Valider l'itinéraire</button>
             </div>
@@ -134,8 +140,14 @@
         </div>
 
         <!-- La Carte Interactive -->
-        <div class="panel" style="flex: 1; padding: 0; overflow: hidden; position: relative;">
+        <div class="panel rail-panel map-panel">
             <div id="map" style="width: 100%; height: 600px; border-radius: 8px;"></div>
+            <div class="map-legend">
+                <strong>Légende</strong>
+                <span><i class="legend-line legend-classic"></i> Ligne classique</span>
+                <span><i class="legend-line legend-lgv"></i> LGV</span>
+                <span><i class="legend-line legend-route"></i> Itinéraire actif</span>
+            </div>
         </div>
     </div>
 </div>
