@@ -3,194 +3,475 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mon Train-Empire (Statique)</title>
+    <title>Train-Empire Studio - Époque Moderne & Rames</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; }
-        header { display: flex; justify-content: space-between; align-items: center; background: #2c3e50; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
-        .controls button { background: #3498db; border: none; color: white; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin-left: 10px; font-weight: bold; }
-        .controls button:hover { background: #2980b9; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+        header { display: block; background: #2c3e50; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
+        h1, h2, h3, h4 { margin-top: 0; }
         
-        .container { display: flex; gap: 20px; flex-wrap: wrap; }
-        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; min-width: 300px; }
+        /* Layout */
+        .main-layout { display: block; width: 100%; }
+        .left-column { display: block; width: 63%; float: left; margin-right: 2%; }
+        .right-column { display: block; width: 35%; float: left; }
+        .clear { clear: both; }
+
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px; box-sizing: border-box; }
         
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
-        .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; background: #fff; transition: transform 0.2s; display: flex; flex-direction: column; justify-content: space-between; }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .card img { max-width: 100%; height: auto; border-radius: 4px; margin-bottom: 10px; align-self: center; }
-        .card h4 { margin: 0 0 10px 0; text-align: center; color: #2c3e50; }
+        /* Filtres et Recherche */
+        .filter-bar { background: #eec; padding: 12px; border-radius: 6px; margin-bottom: 15px; display: block; }
+        .filter-bar input, .filter-bar select { padding: 8px; margin-right: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+        .filter-bar input[type="text"] { width: 200px; }
+
+        /* Grille Catalogue (Optimisée pour 24 items max) */
+        .grid { display: block; width: 100%; }
+        .card { display: inline-block; width: 30%; margin: 1.5%; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; box-sizing: border-box; vertical-align: top; text-align: center; font-size: 0.9em; }
+        .card img { max-width: 100%; height: auto; max-height: 45px; border-radius: 3px; display: block; margin: 0 auto 8px auto; }
+        .card h4 { font-size: 0.95em; height: 38px; overflow: hidden; margin-bottom: 5px; color: #2c3e50; }
+        .price-tag { color: #27ae60; font-weight: bold; margin: 5px 0; font-size: 1.05em; }
+        .card button { background: #3498db; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
+        .card button:hover { background: #2980b9; }
+
+        /* Pagination */
+        .pagination { text-align: center; margin-top: 15px; padding: 10px; }
+        .pagination button { background: #2c3e50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin: 0 5px; font-weight: bold; }
+        .pagination button:disabled { background: #bdc3c7; cursor: not-allowed; }
+
+        /* Créateur de Rame (Composition Actuelle) */
+        .comp-list { border: 1px dashed #bdc3c7; border-radius: 6px; padding: 10px; min-height: 60px; background: #fafafa; margin-bottom: 15px; }
+        .comp-item { background: #fff; border: 1px solid #ddd; padding: 6px 10px; margin-bottom: 5px; border-radius: 4px; position: relative; font-size: 0.85em; }
+        .comp-item button { background: #e74c3c; color: white; border: none; padding: 2px 6px; border-radius: 3px; cursor: pointer; float: right; }
         
-        .stats-list { margin: 0 0 15px 0; padding-left: 20px; font-size: 0.85em; color: #555; }
-        .stats-list li { margin-bottom: 3px; }
-        .sub-cat-tooltip { font-size: 0.75em; color: #7f8c8d; font-style: italic; margin-bottom: 10px; text-align: center; }
+        /* Alertes Logiques */
+        .logic-warning { background: #f39c12; color: white; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 0.85em; display: none; font-weight: bold; }
+        .logic-success { background: #27ae60; color: white; padding: 8px 12px; border-radius: 4px; margin-bottom: 10px; font-size: 0.85em; display: none; font-weight: bold; }
+
+        .stats-box { background: #ecf0f1; padding: 12px; border-radius: 6px; font-size: 0.9em; margin-bottom: 15px; }
+        .stats-box div { margin-bottom: 5px; }
         
-        .card button { background: #27ae60; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
-        .card button:hover { background: #2ecc71; }
+        .action-btn { width: 100%; padding: 10px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; color: white; margin-bottom: 5px; }
         
-        #inventory-grid .card { border-color: #f39c12; border-width: 2px; }
-        .badge { background: #e74c3c; color: white; border-radius: 50%; padding: 4px 10px; font-weight: bold; position: absolute; top: -10px; right: -10px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-        .card-container { position: relative; }
+        /* Inventaire des rames sauvegardées */
+        .saved-rame { border: 1px solid #34495e; border-radius: 6px; padding: 10px; margin-bottom: 10px; background: #fff; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>Mon Train-Empire - Époque VI</h1>
-        <div class="controls">
-            <button onclick="downloadSave()">💾 Exporter Sauvegarde</button>
-            <input type="file" id="import-file" style="display: none;" accept=".json" onchange="importSave(event)">
-            <button onclick="document.getElementById('import-file').click()">📂 Importer Sauvegarde</button>
-            <button onclick="resetGame()" style="background: #e74c3c;">🗑️ Reset</button>
+        <div style="float: left;">
+            <h1 style="margin: 0;">Train-Empire Studio</h1>
+            <small>Version Statique Optimisée — Catalogue Complet & Gestion de Convois Logiques</small>
         </div>
+        <div style="float: right; margin-top: 5px;">
+            <button onclick="exportGameData()" style="padding: 8px 12px; font-weight: bold; cursor: pointer;">💾 Exporter l'Empire</button>
+            <input type="file" id="import-file" style="display: none;" accept=".json" onchange="importGameData(event)">
+            <button onclick="document.getElementById('import-file').click()" style="padding: 8px 12px; font-weight: bold; cursor: pointer;">📂 Importer</button>
+        </div>
+        <div style="clear: both;"></div>
     </header>
 
-    <div class="container">
-        <div class="panel" style="flex: 2;">
-            <h2>Catalogue des Trains</h2>
-            <div id="shop-grid" class="grid">
-                Chargement des trains...
+    <div class="main-layout">
+        
+        <div class="left-column">
+            <div class="panel">
+                <h2>Catalogue Global</h2>
+                
+                <div class="filter-bar">
+                    <input type="text" id="search-input" placeholder="🔍 Rechercher un modèle..." oninput="applyFilters()">
+                    <select id="type-filter" onchange="applyFilters()">
+                        <option value="all">Tous les types</option>
+                        <option value="loco">Locomotives</option>
+                        <option value="autorail">Rames / TGV / Autorails</option>
+                        <option value="voyageur">Voitures Voyageurs</option>
+                        <option value="fret">Wagons Fret</option>
+                    </select>
+                    <select id="sort-filter" onchange="applyFilters()">
+                        <option value="nom">Trier par Nom</option>
+                        <option value="prix-asc">Prix : du - cher</option>
+                        <option value="prix-desc">Prix : du + cher</option>
+                    </select>
+                </div>
+
+                <div id="shop-grid" class="grid">Chargement de la base de données...</div>
+
+                <div class="pagination">
+                    <button id="btn-prev" onclick="changePage(-1)">◀ Précédent</button>
+                    <span id="page-indicator" style="margin: 0 15px; font-weight: bold;">Page 1 / 1</span>
+                    <button id="btn-next" onclick="changePage(1)">Suivant ▶</button>
+                </div>
             </div>
         </div>
 
-        <div class="panel" style="flex: 1;">
-            <h2>Mon Dépôt</h2>
-            <div id="inventory-grid" class="grid" style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));">
+        <div class="right-column">
+            
+            <div class="panel" style="border-top: 4px solid #3498db;">
+                <h3>🛠️ Atelier de Composition</h3>
+                <p style="font-size: 0.85em; color: #7f8c8d; margin-top: -10px;">Assemblez vos motrices et wagons de manière cohérente.</p>
+                
+                <div id="active-composition" class="comp-list">
+                    </div>
+
+                <div id="logic-warning" class="logic-warning"></div>
+                <div id="logic-success" class="logic-success"></div>
+
+                <div class="stats-box">
+                    <div><strong>Coût de la rame :</strong> <span id="comp-cost" style="color:#27ae60; font-weight:bold;">0 €</span></div>
+                    <div><strong>Vitesse max de la rame :</strong> <span id="comp-speed" style="font-weight:bold;">0 km/h</span> <small style="color:#7f8c8d;">(limite du matériel le plus lent)</small></div>
+                    <div><strong>Capacité totale :</strong> <span id="comp-capacity" style="font-weight:bold;">0 places</span></div>
                 </div>
-            <p id="empty-inventory-msg" style="color: #7f8c8d; text-align: center; margin-top: 20px;">Votre dépôt est vide.</p>
+
+                <button class="action-btn" onclick="saveActiveRame()" style="background: #27ae60;">Enregistrer la Rame dans le Dépôt</button>
+                <button class="action-btn" onclick="clearActiveComposition()" style="background: #e74c3c; padding: 6px;">Vider l'atelier</button>
+            </div>
+
+            <div class="panel" style="border-top: 4px solid #f39c12;">
+                <h3>🚂 Mon Dépôt de Rames</h3>
+                <div id="saved-rames-container">
+                    <p style="color: #7f8c8d; font-size: 0.9em; text-align: center;">Aucune rame assemblée pour le moment.</p>
+                </div>
+            </div>
+
         </div>
+
+        <div class="clear"></div>
     </div>
 
     <script>
-        let trainDatabase = [];
-        let playerInventory = {}; 
+        // --- VARIABLES GLOBALES ---
+        let trainDatabase = [];      // Reçu depuis le gros JSON
+        let filteredTrains = [];     // Filtré par l'utilisateur
+        let activeComposition = [];  // Rame en cours de création
+        let savedRames = [];         // Vos rames enregistrées en jeu
 
+        // Pagination
+        let currentPage = 1;
+        const itemsPerPage = 24;     // N'affiche QUE 24 éléments à la fois dans le navigateur !
+
+        // --- CHARGEMENT INITIAL ---
         async function initGame() {
             try {
-                // On charge le fichier mis à jour !
-                const response = await fetch('train_empire_epoque_6_maj.json');
-                trainDatabase = await response.json();
+                // Chargement de ton gros fichier JSON de 2991 lignes
+                const response = await fetch('train_empire_complet.json');
+                const rawData = await response.json();
+                
+                // Pré-calcul logique des prix, vitesses et capacités pour chaque train à la volée
+                trainDatabase = rawData.map(train => {
+                    const stats = calculateLogicalStats(train);
+                    return { ...train, ...stats };
+                });
+
+                filteredTrains = [...trainDatabase];
+                
+                // Charger le dépôt du joueur depuis le stockage du navigateur
+                const savedData = localStorage.getItem('myTrainEmpireRames');
+                if (savedData) savedRames = JSON.parse(savedData);
+
+                applyFilters();
+                renderSavedRames();
             } catch (error) {
-                console.error("Erreur de chargement", error);
-                document.getElementById('shop-grid').innerHTML = "<p style='color:red;'>Erreur : Impossible de charger le fichier JSON.</p>";
-                return;
+                console.error(error);
+                document.getElementById('shop-grid').innerHTML = "<p style='color:red; font-weight:bold;'>Erreur critique : Impossible de charger le fichier 'train_empire_complet.json'. Assurez-vous de lancer un serveur de développement local (ex: python -m http.server).</p>";
+            }
+        }
+
+        // --- MOTEUR LOGIQUE : CALCUL DES STATS ET PRIX D'UN TRAIN ---
+        function calculateLogicalStats(train) {
+            let speed = 90; // Vitesse par défaut si non spécifiée
+            let capacity = 0;
+
+            // Extraction des données chiffrées à partir des caractéristiques textuelles scrapées
+            if (train.caracteristiques) {
+                train.caracteristiques.forEach(attr => {
+                    let speedMatch = attr.match(/(\d+)\s*km\/h/i);
+                    if (speedMatch) speed = parseInt(speedMatch[1]);
+                    
+                    let capMatch = attr.match(/(\d+)\s*places/i);
+                    if (capMatch) capacity += parseInt(capMatch[1]);
+                });
             }
 
-            const savedData = localStorage.getItem('trainEmpireSave');
-            if (savedData) playerInventory = JSON.parse(savedData);
+            // FORMULE DE COÛT LOGIQUE IN-GAME
+            let baseCost = 40000; // Wagons de base
+            if (train.type === 'loco') baseCost = 350000;
+            if (train.type === 'autorail') baseCost = 600000; // TGV entiers ou motrices complexes
+            if (train.type === 'voyageur') baseCost = 90000;
 
+            // Multiplicateur lié à la performance cinétique (vitesse au carré pour simuler la haute technologie)
+            let speedMultiplier = Math.pow(speed / 100, 2);
+            let capacityBonus = capacity * 650;
+
+            let finalPrice = Math.round((baseCost * speedMultiplier) + capacityBonus);
+            
+            // Équilibrages minimum pour éviter les aberrations de prix
+            if (finalPrice < 15000) finalPrice = 15000;
+
+            return { speed, capacity, logicalPrice: finalPrice };
+        }
+
+        // --- FILTRAGE ET PAGINATION ---
+        function applyFilters() {
+            const searchTxt = document.getElementById('search-input').value.toLowerCase();
+            const typeVal = document.getElementById('type-filter').value;
+            const sortVal = document.getElementById('sort-filter').value;
+
+            // Filtres textuels et typologiques
+            filteredTrains = trainDatabase.filter(train => {
+                const matchesSearch = train.nom.toLowerCase().includes(searchTxt);
+                const matchesType = (typeVal === 'all' || train.type === typeVal);
+                return matchesSearch && matchesType;
+            });
+
+            // Tris
+            if (sortVal === 'nom') {
+                filteredTrains.sort((a, b) => a.nom.localeCompare(b.nom));
+            } else if (sortVal === 'prix-asc') {
+                filteredTrains.sort((a, b) => a.logicalPrice - b.logicalPrice);
+            } else if (sortVal === 'prix-desc') {
+                filteredTrains.sort((a, b) => b.logicalPrice - a.logicalPrice);
+            }
+
+            currentPage = 1;
             renderShop();
-            renderInventory();
         }
 
         function renderShop() {
             const shopGrid = document.getElementById('shop-grid');
             shopGrid.innerHTML = '';
 
-            trainDatabase.forEach(train => {
+            const totalPages = Math.ceil(filteredTrains.length / itemsPerPage) || 1;
+            
+            // Découpage du tableau pour n'afficher que les 24 de la page active (Le secret des performances !)
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const selectedItems = filteredTrains.slice(startIndex, startIndex + itemsPerPage);
+
+            if (selectedItems.length === 0) {
+                shopGrid.innerHTML = "<p style='grid-column: 1/-1; color:#7f8c8d; text-align:center;'>Aucun matériel ne correspond à vos critères.</p>";
+            }
+
+            selectedItems.forEach(train => {
                 const card = document.createElement('div');
                 card.className = 'card';
                 const imgSrc = train.image_base64 && train.image_base64.startsWith('data:') ? train.image_base64 : train.image_url;
                 
-                // On transforme le tableau de caractéristiques en une liste à puces HTML
-                let caracteristiquesHtml = '';
-                if(train.caracteristiques && train.caracteristiques.length > 0) {
-                    caracteristiquesHtml = `<ul class="stats-list">` + 
-                        train.caracteristiques.map(attr => `<li>${attr}</li>`).join('') + 
-                        `</ul>`;
-                }
-
-                // Affichage de la description/sous-catégorie si elle existe (très raccourcie pour ne pas casser le design)
-                let descHtml = train.description_categorie ? `<div class="sub-cat-tooltip" title="${train.description_categorie}">ℹ️ ${train.type.toUpperCase()}</div>` : '';
-
                 card.innerHTML = `
-                    <img src="${imgSrc}" alt="${train.nom}" onerror="this.src='https://via.placeholder.com/150?text=Image'">
-                    <div>
-                        <h4>${train.nom}</h4>
-                        ${descHtml}
-                        ${caracteristiquesHtml}
-                    </div>
-                    <button onclick="buyTrain('${train.nom.replace(/'/g, "\\'")}')">Acquérir (+1)</button>
+                    <img src="${imgSrc}" alt="${train.nom}" onerror="this.src='https://via.placeholder.com/150?text=Train'">
+                    <h4>${train.nom}</h4>
+                    <div class="price-tag">${train.logicalPrice.toLocaleString('fr-FR')} €</div>
+                    <div style="font-size:0.75em; color:#7f8c8d; margin-bottom:8px;">${train.speed} km/h | ${train.capacity} places</div>
+                    <button onclick="addToComposition('${train.nom.replace(/'/g, "\\'")}')">Ajouter à l'atelier</button>
                 `;
                 shopGrid.appendChild(card);
             });
+
+            // MAJ indicateurs de page
+            document.getElementById('page-indicator').innerText = `Page ${currentPage} / ${totalPages}`;
+            document.getElementById('btn-prev').disabled = (currentPage === 1);
+            document.getElementById('btn-next').disabled = (currentPage === totalPages);
         }
 
-        function renderInventory() {
-            const invGrid = document.getElementById('inventory-grid');
-            const emptyMsg = document.getElementById('empty-inventory-msg');
-            invGrid.innerHTML = '';
+        function changePage(direction) {
+            currentPage += direction;
+            renderShop();
+            window.scrollTo(0, 0);
+        }
 
-            const ownedTrains = Object.keys(playerInventory);
+        // --- ATELIER DE COMPOSITION (LOGIQUE DU CONVOI) ---
+        function addToComposition(trainName) {
+            const originalTrain = trainDatabase.find(t => t.nom === trainName);
+            if (!originalTrain) return;
+
+            // On pousse une copie unique dans la rame en cours
+            activeComposition.push({ ...originalTrain, uniqueId: Date.now() + Math.random() });
             
-            if (ownedTrains.length === 0) {
-                emptyMsg.style.display = 'block';
-            } else {
-                emptyMsg.style.display = 'none';
-                
-                ownedTrains.forEach(trainName => {
-                    const quantity = playerInventory[trainName];
-                    const trainData = trainDatabase.find(t => t.nom === trainName);
-                    if (!trainData) return;
+            updateCompositionUI();
+        }
 
-                    const imgSrc = trainData.image_base64 && trainData.image_base64.startsWith('data:') ? trainData.image_base64 : trainData.image_url;
+        function removeFromComposition(uniqueId) {
+            activeComposition = activeComposition.filter(item => item.uniqueId !== uniqueId);
+            updateCompositionUI();
+        }
 
-                    const card = document.createElement('div');
-                    card.className = 'card-container';
-                    card.innerHTML = `
-                        <div class="card" style="padding: 10px;">
-                            <span class="badge">x${quantity}</span>
-                            <img src="${imgSrc}" alt="${trainData.nom}">
-                            <h4 style="font-size: 0.9em; margin-bottom: 0;">${trainData.nom}</h4>
-                        </div>
-                    `;
-                    invGrid.appendChild(card);
-                });
+        function clearActiveComposition() {
+            activeComposition = [];
+            updateCompositionUI();
+        }
+
+        function updateCompositionUI() {
+            const container = document.getElementById('active-composition');
+            container.innerHTML = '';
+
+            if (activeComposition.length === 0) {
+                container.innerHTML = '<p style="color: #7f8c8d; text-align: center; font-size: 0.9em; margin: 10px 0;">L\'atelier est vide. Sélectionnez du matériel.</p>';
+                document.getElementById('comp-cost').innerText = "0 €";
+                document.getElementById('comp-speed').innerText = "0 km/h";
+                document.getElementById('comp-capacity').innerText = "0 places";
+                document.getElementById('logic-warning').style.display = 'none';
+                document.getElementById('logic-success').style.display = 'none';
+                return;
+            }
+
+            let totalCost = 0;
+            let totalCapacity = 0;
+            let speeds = [];
+            
+            let countLocoOrAutorail = 0;
+            let countFret = 0;
+            let countVoyageur = 0;
+
+            activeComposition.forEach(item => {
+                totalCost += item.logicalPrice;
+                totalCapacity += item.capacity;
+                speeds.push(item.speed);
+
+                if (item.type === 'loco' || item.type === 'autorail') countLocoOrAutorail++;
+                if (item.type === 'fret') countFret++;
+                if (item.type === 'voyageur') countVoyageur++;
+
+                const div = document.createElement('div');
+                div.className = 'comp-item';
+                div.innerHTML = `
+                    <strong>[${item.type.toUpperCase()}]</strong> ${item.nom} (${item.speed} km/h)
+                    <button onclick="removeFromComposition(${item.uniqueId})">✕</button>
+                `;
+                container.appendChild(div);
+            });
+
+            // CALCULS ET LOGIQUES DES COMPOSITIONS
+            let minSpeed = Math.min(...speeds); // La vitesse globale de la rame est restreinte par son wagon le plus lent
+            
+            document.getElementById('comp-cost').innerText = totalCost.toLocaleString('fr-FR') + " €";
+            document.getElementById('comp-speed').innerText = minSpeed + " km/h";
+            document.getElementById('comp-capacity').innerText = totalCapacity + " places";
+
+            // ANALYSE COHÉRENCE ET RÈGLES DE JEU
+            const warningBox = document.getElementById('logic-warning');
+            const successBox = document.getElementById('logic-success');
+            warningBox.innerHTML = '';
+            warningBox.style.display = 'none';
+            successBox.style.display = 'none';
+
+            let isLogicValid = true;
+            let warningMessages = [];
+
+            // RÈGLE 1 : Présence d'une motorisation
+            if (countLocoOrAutorail === 0) {
+                isLogicValid = false;
+                warningMessages.push("❌ Rame invalide : Votre convoi n'a pas de motrice (Ajoutez une Locomotive ou un Autorail/TGV).");
+            }
+
+            // RÈGLE 2 : Incohérences de type Fret vs Passagers
+            if (countFret > 0 && countVoyageur > 0) {
+                warningMessages.push("⚠️ Alerte Règle : Convoi mixte (Fret + Voyageurs). Autorisé mais réduit le réalisme de la ligne.");
+            }
+
+            // RÈGLE 3 : Puissance / Traction logique (Une loco ne peut pas tirer à l'infini)
+            let totalWagons = countFret + countVoyageur;
+            if (countLocoOrAutorail > 0 && totalWagons > (countLocoOrAutorail * 12)) {
+                isLogicValid = false;
+                warningMessages.push(`❌ Masse critique : Vos ${countLocoOrAutorail} motrice(s) n'ont pas la puissance pour tracter ${totalWagons} wagons (Maximum 12 par motrice).`);
+            }
+
+            // Affichage des verdicts
+            if (warningMessages.length > 0) {
+                warningBox.innerHTML = warningMessages.join('<br>');
+                warningBox.style.display = 'block';
+            }
+            if (isLogicValid) {
+                successBox.innerText = "✅ Structure de rame conforme et prête à rouler !";
+                successBox.style.display = 'block';
             }
         }
 
-        function buyTrain(trainName) {
-            playerInventory[trainName] = (playerInventory[trainName] || 0) + 1;
-            saveGameLocal();
-            renderInventory();
+        // --- SAUVEGARDE ET GESTION DU DÉPÔT DE RAMES ---
+        function saveActiveRame() {
+            if (activeComposition.length === 0) return alert("Atelier vide !");
+            
+            // Vérification de sécurité motrice avant d'autoriser la sauvegarde définitive
+            const hasMotor = activeComposition.some(item => item.type === 'loco' || item.type === 'autorail');
+            if(!hasMotor) {
+                if(!confirm("Attention: Votre rame n'a aucune motrice pour avancer. Voulez-vous quand même la mettre au dépôt ?")) return;
+            }
+
+            const name = prompt("Donnez un nom à cette composition de train :", "Rame Express N°" + (savedRames.length + 1));
+            if (!name) return;
+
+            let totalCost = activeComposition.reduce((sum, item) => sum + item.logicalPrice, 0);
+            let minSpeed = Math.min(...activeComposition.map(item => item.speed));
+            let totalCapacity = activeComposition.reduce((sum, item) => sum + item.capacity, 0);
+
+            const nouvelleRame = {
+                id: Date.now(),
+                nomRame: name,
+                elements: activeComposition.map(item => ({ nom: item.nom, type: item.type })),
+                coutTotal: totalCost,
+                vitesseMax: minSpeed,
+                capacite: totalCapacity
+            };
+
+            savedRames.push(nouvelleRame);
+            localStorage.setItem('myTrainEmpireRames', JSON.stringify(savedRames));
+            
+            clearActiveComposition();
+            renderSavedRames();
         }
 
-        function saveGameLocal() {
-            localStorage.setItem('trainEmpireSave', JSON.stringify(playerInventory));
+        function deleteSavedRame(id) {
+            if (confirm("Supprimer définitivement cette rame du dépôt ?")) {
+                savedRames = savedRames.filter(r => r.id !== id);
+                localStorage.setItem('myTrainEmpireRames', JSON.stringify(savedRames));
+                renderSavedRames();
+            }
         }
 
-        function downloadSave() {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(playerInventory));
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", "ma_sauvegarde_train.json");
-            document.body.appendChild(downloadAnchorNode);
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
+        function renderSavedRames() {
+            const container = document.getElementById('saved-rames-container');
+            container.innerHTML = '';
+
+            if (savedRames.length === 0) {
+                container.innerHTML = '<p style="color: #7f8c8d; font-size: 0.9em; text-align: center;">Aucune rame assemblée pour le moment.</p>';
+                return;
+            }
+
+            savedRames.forEach(rame => {
+                const div = document.createElement('div');
+                div.className = 'saved-rame';
+                div.innerHTML = `
+                    <div style="font-weight: bold; color: #2c3e50; font-size: 1.05em; margin-bottom: 5px;">
+                        🚂 ${rame.nomRame}
+                        <button onclick="deleteSavedRame(${rame.id})" style="background:#e74c3c; color:white; border:none; float:right; border-radius:3px; cursor:pointer; padding:2px 6px;">Démanteler</button>
+                    </div>
+                    <div style="font-size: 0.8em; color: #555;">
+                        <strong>Composée de :</strong> ${rame.elements.length} modules (${rame.elements.map(e => e.nom.split(' ')[0]).join(' + ')})
+                    </div>
+                    <div style="font-size: 0.85em; margin-top: 5px; color: #27ae60; font-weight: bold;">
+                        💰 Val. : ${rame.coutTotal.toLocaleString('fr-FR')} € | ⚡ Max : ${rame.vitesseMax} km/h | 👥 Capa : ${rame.capacite} passagers
+                    </div>
+                `;
+                container.appendChild(div);
+            });
         }
 
-        function importSave(event) {
+        // --- IMPORTS EXPORTS ---
+        function exportGameData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedRames));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "mon_empire_de_trains.json");
+            dlAnchor.click();
+        }
+
+        function importGameData(event) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    playerInventory = JSON.parse(e.target.result);
-                    saveGameLocal();
-                    renderInventory();
-                    alert("Sauvegarde importée avec succès !");
-                } catch (error) {
-                    alert("Erreur: Sauvegarde invalide.");
-                }
+                    savedRames = JSON.parse(e.target.result);
+                    localStorage.setItem('myTrainEmpireRames', JSON.stringify(savedRames));
+                    renderSavedRames();
+                    alert("Dépôt synchronisé ! Vos rames ont été importées.");
+                } catch(err) { alert("Fichier de sauvegarde corrompu."); }
             };
             reader.readAsText(file);
-            event.target.value = '';
-        }
-
-        function resetGame() {
-            if (confirm("Voulez-vous vraiment revendre tout votre dépôt ?")) {
-                playerInventory = {};
-                saveGameLocal();
-                renderInventory();
-            }
         }
 
         window.onload = initGame;
