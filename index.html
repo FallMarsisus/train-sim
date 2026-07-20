@@ -7,21 +7,27 @@
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px; color: #333; }
         header { display: flex; justify-content: space-between; align-items: center; background: #2c3e50; color: white; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; }
-        .controls button { background: #3498db; border: none; color: white; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin-left: 10px; }
+        .controls button { background: #3498db; border: none; color: white; padding: 10px 15px; border-radius: 5px; cursor: pointer; margin-left: 10px; font-weight: bold; }
         .controls button:hover { background: #2980b9; }
         
-        .container { display: flex; gap: 20px; }
-        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; }
+        .container { display: flex; gap: 20px; flex-wrap: wrap; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; min-width: 300px; }
         
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
-        .card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; background: #fff; transition: transform 0.2s; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; background: #fff; transition: transform 0.2s; display: flex; flex-direction: column; justify-content: space-between; }
         .card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .card img { max-width: 100%; height: auto; border-radius: 4px; }
-        .card button { margin-top: 10px; background: #27ae60; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; width: 100%; }
+        .card img { max-width: 100%; height: auto; border-radius: 4px; margin-bottom: 10px; align-self: center; }
+        .card h4 { margin: 0 0 10px 0; text-align: center; color: #2c3e50; }
+        
+        .stats-list { margin: 0 0 15px 0; padding-left: 20px; font-size: 0.85em; color: #555; }
+        .stats-list li { margin-bottom: 3px; }
+        .sub-cat-tooltip { font-size: 0.75em; color: #7f8c8d; font-style: italic; margin-bottom: 10px; text-align: center; }
+        
+        .card button { background: #27ae60; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
         .card button:hover { background: #2ecc71; }
         
-        #inventory-grid .card { border-color: #f39c12; }
-        .badge { background: #e74c3c; color: white; border-radius: 50%; padding: 2px 8px; font-weight: bold; position: absolute; top: -10px; right: -10px; }
+        #inventory-grid .card { border-color: #f39c12; border-width: 2px; }
+        .badge { background: #e74c3c; color: white; border-radius: 50%; padding: 4px 10px; font-weight: bold; position: absolute; top: -10px; right: -10px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
         .card-container { position: relative; }
     </style>
 </head>
@@ -30,58 +36,51 @@
     <header>
         <h1>Mon Train-Empire - Époque VI</h1>
         <div class="controls">
-            <button onclick="downloadSave()">💾 Télécharger Sauvegarde</button>
+            <button onclick="downloadSave()">💾 Exporter Sauvegarde</button>
             <input type="file" id="import-file" style="display: none;" accept=".json" onchange="importSave(event)">
             <button onclick="document.getElementById('import-file').click()">📂 Importer Sauvegarde</button>
-            <button onclick="resetGame()" style="background: #e74c3c;">🗑️ Réinitialiser</button>
+            <button onclick="resetGame()" style="background: #e74c3c;">🗑️ Reset</button>
         </div>
     </header>
 
     <div class="container">
-        <div class="panel">
-            <h2>Magasin (Catalogue)</h2>
+        <div class="panel" style="flex: 2;">
+            <h2>Catalogue des Trains</h2>
             <div id="shop-grid" class="grid">
                 Chargement des trains...
             </div>
         </div>
 
-        <div class="panel">
-            <h2>Mon Inventaire</h2>
-            <div id="inventory-grid" class="grid">
+        <div class="panel" style="flex: 1;">
+            <h2>Mon Dépôt</h2>
+            <div id="inventory-grid" class="grid" style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));">
                 </div>
-            <p id="empty-inventory-msg">Votre inventaire est vide. Achetez des trains !</p>
+            <p id="empty-inventory-msg" style="color: #7f8c8d; text-align: center; margin-top: 20px;">Votre dépôt est vide.</p>
         </div>
     </div>
 
     <script>
-        // --- ETAT DU JEU ---
-        let trainDatabase = []; // Tous les trains du JSON
-        let playerInventory = {}; // Format: { "Nom du train": quantite }
+        let trainDatabase = [];
+        let playerInventory = {}; 
 
-        // --- INITIALISATION ---
         async function initGame() {
-            // 1. Charger la base de données
             try {
-                const response = await fetch('train_empire_epoque_6.json');
+                // On charge le fichier mis à jour !
+                const response = await fetch('train_empire_epoque_6_maj.json');
                 trainDatabase = await response.json();
             } catch (error) {
-                console.error("Erreur lors du chargement du JSON", error);
-                document.getElementById('shop-grid').innerHTML = "<p style='color:red;'>Erreur : Impossible de charger train_empire_epoque_6.json. Assurez-vous d'utiliser un serveur local.</p>";
+                console.error("Erreur de chargement", error);
+                document.getElementById('shop-grid').innerHTML = "<p style='color:red;'>Erreur : Impossible de charger le fichier JSON.</p>";
                 return;
             }
 
-            // 2. Charger la sauvegarde depuis le localStorage
             const savedData = localStorage.getItem('trainEmpireSave');
-            if (savedData) {
-                playerInventory = JSON.parse(savedData);
-            }
+            if (savedData) playerInventory = JSON.parse(savedData);
 
-            // 3. Affichage
             renderShop();
             renderInventory();
         }
 
-        // --- AFFICHAGE ---
         function renderShop() {
             const shopGrid = document.getElementById('shop-grid');
             shopGrid.innerHTML = '';
@@ -89,14 +88,27 @@
             trainDatabase.forEach(train => {
                 const card = document.createElement('div');
                 card.className = 'card';
-                // On utilise l'image base64 si dispo, sinon l'URL
                 const imgSrc = train.image_base64 && train.image_base64.startsWith('data:') ? train.image_base64 : train.image_url;
                 
+                // On transforme le tableau de caractéristiques en une liste à puces HTML
+                let caracteristiquesHtml = '';
+                if(train.caracteristiques && train.caracteristiques.length > 0) {
+                    caracteristiquesHtml = `<ul class="stats-list">` + 
+                        train.caracteristiques.map(attr => `<li>${attr}</li>`).join('') + 
+                        `</ul>`;
+                }
+
+                // Affichage de la description/sous-catégorie si elle existe (très raccourcie pour ne pas casser le design)
+                let descHtml = train.description_categorie ? `<div class="sub-cat-tooltip" title="${train.description_categorie}">ℹ️ ${train.type.toUpperCase()}</div>` : '';
+
                 card.innerHTML = `
-                    <img src="${imgSrc}" alt="${train.nom}" onerror="this.src='https://via.placeholder.com/150?text=Pas+d\\'image'">
-                    <h4>${train.nom}</h4>
-                    <p style="font-size: 0.8em; color: #7f8c8d;">${train.type} | ${train.caracteristiques[0] || ''}</p>
-                    <button onclick="buyTrain('${train.nom.replace(/'/g, "\\'")}')">Ajouter (+1)</button>
+                    <img src="${imgSrc}" alt="${train.nom}" onerror="this.src='https://via.placeholder.com/150?text=Image'">
+                    <div>
+                        <h4>${train.nom}</h4>
+                        ${descHtml}
+                        ${caracteristiquesHtml}
+                    </div>
+                    <button onclick="buyTrain('${train.nom.replace(/'/g, "\\'")}')">Acquérir (+1)</button>
                 `;
                 shopGrid.appendChild(card);
             });
@@ -116,7 +128,6 @@
                 
                 ownedTrains.forEach(trainName => {
                     const quantity = playerInventory[trainName];
-                    // Retrouver les infos du train dans la bdd
                     const trainData = trainDatabase.find(t => t.nom === trainName);
                     if (!trainData) return;
 
@@ -125,10 +136,10 @@
                     const card = document.createElement('div');
                     card.className = 'card-container';
                     card.innerHTML = `
-                        <div class="card">
+                        <div class="card" style="padding: 10px;">
                             <span class="badge">x${quantity}</span>
                             <img src="${imgSrc}" alt="${trainData.nom}">
-                            <h4>${trainData.nom}</h4>
+                            <h4 style="font-size: 0.9em; margin-bottom: 0;">${trainData.nom}</h4>
                         </div>
                     `;
                     invGrid.appendChild(card);
@@ -136,30 +147,22 @@
             }
         }
 
-        // --- ACTIONS DE JEU ---
         function buyTrain(trainName) {
-            if (playerInventory[trainName]) {
-                playerInventory[trainName]++;
-            } else {
-                playerInventory[trainName] = 1;
-            }
+            playerInventory[trainName] = (playerInventory[trainName] || 0) + 1;
             saveGameLocal();
             renderInventory();
         }
 
-        // --- SYSTEME DE SAUVEGARDE ---
         function saveGameLocal() {
-            // Sauvegarde dans le navigateur (automatique à chaque action)
             localStorage.setItem('trainEmpireSave', JSON.stringify(playerInventory));
         }
 
         function downloadSave() {
-            // Génère un fichier .json téléchargeable depuis l'inventaire
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(playerInventory));
             const downloadAnchorNode = document.createElement('a');
             downloadAnchorNode.setAttribute("href", dataStr);
             downloadAnchorNode.setAttribute("download", "ma_sauvegarde_train.json");
-            document.body.appendChild(downloadAnchorNode); // requis pour Firefox
+            document.body.appendChild(downloadAnchorNode);
             downloadAnchorNode.click();
             downloadAnchorNode.remove();
         }
@@ -167,32 +170,29 @@
         function importSave(event) {
             const file = event.target.files[0];
             if (!file) return;
-
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const importedData = JSON.parse(e.target.result);
-                    playerInventory = importedData;
+                    playerInventory = JSON.parse(e.target.result);
                     saveGameLocal();
                     renderInventory();
                     alert("Sauvegarde importée avec succès !");
                 } catch (error) {
-                    alert("Erreur: Le fichier n'est pas une sauvegarde valide.");
+                    alert("Erreur: Sauvegarde invalide.");
                 }
             };
             reader.readAsText(file);
-            event.target.value = ''; // Reset l'input
+            event.target.value = '';
         }
 
         function resetGame() {
-            if (confirm("Voulez-vous vraiment effacer votre inventaire ?")) {
+            if (confirm("Voulez-vous vraiment revendre tout votre dépôt ?")) {
                 playerInventory = {};
                 saveGameLocal();
                 renderInventory();
             }
         }
 
-        // Lancer le jeu au chargement de la page
         window.onload = initGame;
     </script>
 </body>
