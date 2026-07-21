@@ -598,3 +598,40 @@ nav {
     .map-control-panel { flex: 1 1 auto; }
     .map-panel #map { height: 500px !important; }
 }
+
+/* Badge de localisation dans le dépôt */
+.station-badge {
+    display: inline-block;
+    margin-top: 6px;
+    background: #E2E8F0;
+    color: #1E293B;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.85em;
+    border: 1px solid #CBD5E1;
+}
+
+/* Encadré d'alerte sur la carte */
+.route-feedback {
+    display: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 0.9em;
+    margin-bottom: 15px;
+}
+
+.route-feedback.error {
+    display: block;
+    background: #FEF2F2;
+    color: #991B1B;
+    border: 1px solid #FCA5A5;
+    border-left: 5px solid #EF4444;
+}
+
+.route-feedback.success {
+    display: block;
+    background: #ECFDF5;
+    color: #065F46;
+    border: 1px solid #6EE7B7;
+    border-left: 5px solid #10B981;
+}

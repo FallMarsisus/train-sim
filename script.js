@@ -15,6 +15,51 @@ const ETA_DWELL_TIME_SEC = 45;
 const ETA_ACCELERATION_MS2 = 0.55;
 const ETA_DECELERATION_MS2 = 0.65;
 
+const REBROUSSEMENT_MALUS_SEC = 360; // 6 minutes de pénalité en gare
+
+/**
+ * Calcul d'itinéraire avec détection de rebroussements.
+ * @param {Array} pathNodes - Liste des nœuds/gares parcourus
+ * @param {Set} stationNodeIds - Ensemble des identifiants des nœuds qui sont des gares
+ */
+function validateAndCalculatePath(pathNodes, stationNodeIds) {
+    let totalDwellTime = 0;
+    let turnAroundCount = 0;
+
+    for (let i = 1; i < pathNodes.length - 1; i++) {
+        const prev = pathNodes[i - 1];
+        const curr = pathNodes[i];
+        const next = pathNodes[i + 1];
+
+        // Calcul des vecteurs pour détecter un demi-tour / rebroussement
+        const v1 = { x: curr.x - prev.x, y: curr.y - prev.y };
+        const v2 = { x: next.x - curr.x, y: next.y - curr.y };
+        
+        // Produit scalaire pour vérifier l'angle (angle très aigu / sens opposé)
+        const dotProduct = (v1.x * v2.x + v1.y * v2.y);
+        const isReversal = dotProduct < -0.7; // Sens inverse détecté
+
+        const isStation = stationNodeIds.has(curr.id);
+
+        if (isReversal) {
+            if (!isStation) {
+                // ❌ REBROUSSEMENT HORS GARE INTERDIT !
+                return { valid: false, reason: `Rebroussement interdit en pleine voie au nœud ${curr.id}` };
+            } else {
+                // ⚠️ REBROUSSEMENT EN GARE AUTORISÉ AVEC MALUS
+                turnAroundCount++;
+                totalDwellTime += REBROUSSEMENT_MALUS_SEC;
+            }
+        }
+    }
+
+    return {
+        valid: true,
+        turnAroundCount: turnAroundCount,
+        penaltySeconds: totalDwellTime
+    };
+}
+
 // --- GESTION DES ONGLETS ---
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -396,36 +441,83 @@ function disassembleRame(id) {
         }
     }
 }
-
 function renderSavedRames() {
-    const container = document.getElementById('saved-rames-container');
-    container.innerHTML = '';
-
-    if (gameState.savedRames.length === 0) {
-        container.innerHTML = '<p style="color: #7f8c8d; text-align: center;">Dépôt vide.</p>';
+    const container = document.getElementById('saved-rames-list');
+    if (!container) return;
+    
+    if (!gameState.savedRames || gameState.savedRames.length === 0) {
+        container.innerHTML = "<p style='color: #64748b;'>Aucune rame sauvegardée dans le dépôt.</p>";
         return;
     }
 
-    gameState.savedRames.forEach(rame => {
-        const div = document.createElement('div');
-        div.className = 'saved-rame';
-        
-        let visualHtml = rame.elements.map(el => `<img src="${el.imgResolved}" title="${el.nom}">`).join('<span class="coupler">-</span>');
-
-        div.innerHTML = `
-            <div class="rame-header">
-                <strong style="font-size: 1.2em; color: #2c3e50;">🚆 ${rame.nom}</strong>
-                <button onclick="disassembleRame('${rame.id}')" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">Démanteler</button>
-            </div>
-            <div style="font-size: 0.9em; margin-bottom: 10px; color: #7f8c8d;">
-                Val: ${rame.stats.cout} | Max: ${rame.stats.vitesse} | 👥 ${rame.stats.places}
-            </div>
-            <div class="rame-visualizer">
-                ${visualHtml}
+    container.innerHTML = gameState.savedRames.map(rame => {
+        assignDefaultStationToRame(rame);
+        return `
+            <div class="saved-rame">
+                <div class="rame-header">
+                    <div>
+                        <h3 style="margin: 0; color: #0A192F;">${rame.nom}</h3>
+                        <span class="station-badge">📍 Localisation : <strong>${rame.currentStation}</strong></span>
+                    </div>
+                    <button class="action-btn cancel" onclick="supprimerRame(${rame.id})">Supprimer</button>
+                </div>
+                <div class="rame-visualizer">
+                    ${rame.composition ? rame.composition.map(item => `<img src="${item.image}" title="${item.nom}">`).join('<span class="coupler">🔗</span>') : ''}
+                </div>
             </div>
         `;
-        container.appendChild(div);
-    });
+    }).join('');
+}
+
+function assignDefaultStationToRame(rame) {
+    if (!rame.currentStation) {
+        // Gare par défaut : Paris-Gare-de-Lyon ou la 1ère gare disponible
+        rame.currentStation = "Paris-Gare-de-Lyon";
+    }
+}
+
+function onRameSelectChange() {
+    const rameId = document.getElementById('select-rame-route')?.value;
+    const selectDep = document.getElementById('select-station-dep');
+    if (!rameId || !selectDep) return;
+
+    const rame = gameState.savedRames.find(r => String(r.id) === String(rameId));
+    if (rame) {
+        assignDefaultStationToRame(rame);
+        selectDep.value = rame.currentStation;
+        
+        // Notification d'information sur l'emplacement actuel de la rame
+        showToast(`Rame "${rame.nom}" sélectionnée. Emplacement actuel : ${rame.currentStation}`, "info");
+        checkStationCoherence();
+    }
+}
+
+function checkStationCoherence() {
+    const rameId = document.getElementById('select-rame-route')?.value;
+    const selectDep = document.getElementById('select-station-dep')?.value;
+    const feedback = document.getElementById('route-feedback');
+    
+    if (!rameId || !selectDep) return true;
+
+    const rame = gameState.savedRames.find(r => String(r.id) === String(rameId));
+    if (!rame) return true;
+
+    assignDefaultStationToRame(rame);
+
+    if (rame.currentStation !== selectDep) {
+        if (feedback) {
+            feedback.className = "route-feedback error";
+            feedback.style.display = "block";
+            feedback.innerHTML = `❌ <strong>Départ impossible :</strong> La rame <em>${rame.nom}</em> se trouve actuellement à <strong>${rame.currentStation}</strong> (et non à ${selectDep}).`;
+        }
+        return false;
+    } else {
+        if (feedback) {
+            feedback.className = "route-feedback success";
+            feedback.style.display = "none";
+        }
+        return true;
+    }
 }
 
 function populateRameSelect() {
@@ -1142,17 +1234,19 @@ function setRouteFeedback(message, type = 'error') {
     box.innerText = message;
 }
 
-function showToast(message, type = '') {
+function showToast(message, type = "info") {
     const container = document.getElementById('toast-container');
     if (!container) return;
     const toast = document.createElement('div');
-    toast.className = `toast ${type}`.trim();
-    toast.innerText = message;
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<strong>${type === 'error' ? '⚠️ Erreur' : 'ℹ️ Info'}</strong> : ${message}`;
     container.appendChild(toast);
     setTimeout(() => {
-        toast.remove();
-    }, 3600);
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 4500);
 }
+
 
 function calculateSegmentTravelTimeSec(distanceKm, speedKmh) {
     const distanceM = Math.max(0, distanceKm * 1000);
@@ -1197,111 +1291,52 @@ function getStationById(stationId) {
     return stationById.get(String(stationId)) || null;
 }
 
-async function planifierTrajet() {
-    const rameId = document.getElementById('select-rame').value;
-    const time = document.getElementById('time-depart').value;
-    const rameOriginId = document.getElementById('select-rame-origin').value;
+function planifierTrajet() {
+    const rameId = document.getElementById('select-rame-route')?.value;
+    const depStation = document.getElementById('select-station-dep')?.value;
+    const arrStation = document.getElementById('select-station-arr')?.value;
+    const serviceType = document.getElementById('select-service-type')?.value || "omnibus";
 
-    setRouteFeedback('');
-
-    if (!rameId || !selectedDepart || !selectedArrivee || !time || !rameOriginId) {
-        setRouteFeedback("Veuillez sélectionner la rame, sa gare de départ, les gares départ/arrivée et l'heure.");
+    if (!rameId || !depStation || !arrStation) {
+        showToast("Veuillez sélectionner une rame, une gare de départ et une gare d'arrivée.", "error");
         return;
     }
 
-    const rame = gameState.savedRames.find(r => r.id == rameId);
-    if (!rame) return setRouteFeedback("Rame introuvable.");
-    if (gameState.activeRoutes.some(route => route.rameId === rame.id)) {
-        return setRouteFeedback(`La rame ${rame.nom} est déjà en circulation.`);
-    }
-    const rameOriginStation = getStationById(rameOriginId);
-    if (!rameOriginStation) return setRouteFeedback("Gare de rame invalide.");
-
-    if (String(selectedDepart.id) !== String(rameOriginStation.id)) {
-        return setRouteFeedback(`Départ incohérent: départ choisi ${selectedDepart.nom}, mais rame embarquée à ${rameOriginStation.nom}.`);
-    }
-    if (rame.currentStationId && String(rame.currentStationId) !== String(rameOriginStation.id)) {
-        return setRouteFeedback(`Rame ${rame.nom} actuellement à ${rame.currentStationNom}, impossible de partir depuis ${rameOriginStation.nom}.`);
+    if (depStation === arrStation) {
+        showToast("La gare de départ et la gare d'arrivée doivent être différentes.", "error");
+        return;
     }
 
-    let selectedStops = getSelectedIntermediateStops();
-    if (selectedStops.length === 0) {
-        selectedStops = computeGraphIntermediateStations(selectedDepart, selectedArrivee);
+    // 1. Vérification stricte de la position de la rame
+    if (!checkStationCoherence()) {
+        showToast("Impossible de lancer le train : la rame n'est pas située dans la gare de départ !", "error");
+        return;
     }
 
-    const routeStations = buildRouteStations(selectedDepart, selectedStops, selectedArrivee);
-    const lonLatPath = routeStations.map(station => `${station.lon},${station.lat}`).join('|');
-    
-    try {
-        const brouterUrl = `https://brouter.de/brouter?lonlats=${lonLatPath}&profile=rail&format=geojson`;
-        const res = await fetch(brouterUrl);
-        const geo = await res.json();
-        const routeFeature = geo?.features?.[0];
-        if (!routeFeature?.geometry?.coordinates?.length) throw new Error('Aucun tracé valide');
+    const rame = gameState.savedRames.find(r => String(r.id) === String(rameId));
 
-        const speedKmh = parseRameSpeedKmh(rame) * 0.85;
-        const timing = computeRouteTiming(routeStations, speedKmh);
-        if (!Number.isFinite(timing.totalDistanceKm) || timing.totalDistanceKm <= 0) throw new Error('Distance invalide');
-        
-        const departDate = new Date(`1970-01-01T${time}:00`);
-        const arriveeDate = new Date(departDate.getTime() + (timing.totalTimeSec * 1000));
-        const timeArrivee = arriveeDate.toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'});
-        
-        const path = routeFeature.geometry.coordinates.map(c => [c[1], c[0]]);
-        const routeId = `route_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    // 2. Création de la circulation active
+    const newRoute = {
+        id: Date.now(),
+        rameId: rame.id,
+        rameNom: rame.nom,
+        stationDepart: depStation,
+        stationArrivee: arrStation,
+        serviceType: serviceType,
+        progress: 0,
+        speedKmH: 120, // Exemple de vitesse moyenne
+        status: "En circulation",
+        path: [] // Rempli par la recherche d'itinéraire Leaflet/Graphe
+    };
 
-        rame.currentStationId = String(rameOriginStation.id);
-        rame.currentStationNom = rameOriginStation.nom;
-        
-        gameState.activeRoutes.push({
-            id: routeId,
-            rameId: rame.id,
-            rameNom: rame.nom,
-            departNom: selectedDepart.nom,
-            arriveeNom: selectedArrivee.nom,
-            departId: String(selectedDepart.id),
-            arriveeId: String(selectedArrivee.id),
-            heureDepart: time,
-            heureArrivee: timeArrivee,
-            distance: Math.round(timing.totalDistanceKm),
-            routeStations: routeStations.map(station => ({
-                id: String(station.id),
-                nom: station.nom,
-                lat: station.lat,
-                lon: station.lon
-            })),
-            segmentDurationsSec: timing.segmentDurationsSec,
-            segmentDistancesKm: timing.segmentDistancesKm,
-            dwellTimeSec: ETA_DWELL_TIME_SEC,
-            totalDurationSec: timing.totalTimeSec,
-            startedAtMs: Date.now(),
-            progress: 0,
-            statusText: `Prêt au départ depuis ${selectedDepart.nom}`,
-            intermediateStops: selectedStops.map(station => station.nom),
-            path: path
-        });
-        
-        saveGame();
-        setRouteFeedback(`Trajet validé. ETA ${timeArrivee} (${Math.round(timing.totalTimeSec / 60)} min).`, 'success');
-        showToast(`🚆 ${rame.nom} en circulation vers ${selectedArrivee.nom}.`, 'success');
-        
-        selectedDepart = null; selectedArrivee = null;
-        document.getElementById('lbl-depart').innerText = "Cliquez sur une gare";
-        document.getElementById('lbl-arrivee').innerText = "Cliquez sur une gare";
-        document.getElementById('lbl-depart').style.color = '#e74c3c';
-        document.getElementById('lbl-arrivee').style.color = '#e74c3c';
-        resetIntermediateSelections();
-        
-        refreshRouteMapLayers();
-        updateTrainMarkers();
-        startRouteSimulation();
-        populateRameSelect();
-        syncRameOriginFromSelection();
-        renderActiveRoutes();
-        
-    } catch (e) {
-        setRouteFeedback("Erreur de routage. Essayez un autre trajet.");
-    }
+    gameState.activeRoutes.push(newRoute);
+
+    showToast(`🟢 Train "${rame.nom}" parti de ${depStation} vers ${arrStation} (${serviceType.toUpperCase()})`, "success");
+
+    // Mise à jour de l'IHM
+    renderActiveRoutes();
+    refreshRouteMapLayers();
+    updateTrainMarkers();
 }
 
 function getPathPoint(path, progress) {
@@ -1361,33 +1396,32 @@ function finalizeRoute(route) {
 }
 
 function updateRouteSimulation() {
-    if (!gameState.activeRoutes.length) {
-        updateTrainMarkers();
-        return;
-    }
-    const now = Date.now();
-    const completedIds = [];
+    if (!gameState.activeRoutes || gameState.activeRoutes.length === 0) return;
 
-    gameState.activeRoutes.forEach(route => {
-        if (!route.startedAtMs || !route.totalDurationSec) return;
-        const elapsedSec = Math.max(0, (now - route.startedAtMs) / 1000);
-        const total = Math.max(1, route.totalDurationSec);
-        route.progress = Math.min(1, elapsedSec / total);
-        route.statusText = computeRouteStatus(route, elapsedSec);
-        if (route.progress >= 1) completedIds.push(route.id);
+    gameState.activeRoutes.forEach((route, index) => {
+        route.progress += 0.02; // Avancement de la simulation
+
+        if (route.progress >= 1) {
+            route.progress = 1;
+            
+            // 📍 La rame est maintenant officiellement arrivée à sa gare de destination !
+            const rame = gameState.savedRames.find(r => String(r.id) === String(route.rameId));
+            if (rame) {
+                rame.currentStation = route.stationArrivee;
+            }
+
+            showToast(`🏁 Le train "${route.rameNom}" est arrivé à destination : ${route.stationArrivee}.`, "success");
+            
+            // Supprimer des circulations actives
+            gameState.activeRoutes.splice(index, 1);
+            
+            // Rafraîchir l'affichage du dépôt si visible
+            renderSavedRames();
+            renderActiveRoutes();
+            refreshRouteMapLayers();
+        }
     });
 
-    if (completedIds.length) {
-        const completedRoutes = gameState.activeRoutes.filter(route => completedIds.includes(route.id));
-        completedRoutes.forEach(finalizeRoute);
-        gameState.activeRoutes = gameState.activeRoutes.filter(route => !completedIds.includes(route.id));
-        populateRameSelect();
-        syncRameOriginFromSelection();
-    }
-
-    saveGame();
-    renderActiveRoutes();
-    refreshRouteMapLayers();
     updateTrainMarkers();
 }
 

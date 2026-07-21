@@ -103,52 +103,49 @@
 <div id="view-carte" class="view-section">
     <div class="layout-split">
         <!-- Panneau de Contrôle des Trajets -->
-        <div class="panel rail-panel map-control-panel">
-            <h2>🗺️ Poste d'Aiguillage</h2>
-            <p class="subtitle">Assignez vos rames sur le réseau.</p>
-            
-            <div class="map-form-card">
-                <h4>Créer une Liaison</h4>
+        <div class="panel map-control-panel">
+    <h3>Planification d'Itinéraire</h3>
+    
+    <div class="map-form-card">
+        <h4>1. Choix du Matériel</h4>
+        <label class="field-label" for="select-rame-route">Rame à engager :</label>
+        <select id="select-rame-route" class="field-input" onchange="onRameSelectChange()">
+            </select>
 
-                <label class="field-label" for="select-rame">Rame disponible :</label>
-                <select id="select-rame" class="field-input">
-                    <option value="">-- Choisissez une rame au dépôt --</option>
-                </select>
+        <h4>2. Trajet & Services</h4>
+        <label class="field-label" for="select-station-dep">Gare de départ :</label>
+        <select id="select-station-dep" class="field-input" onchange="checkStationCoherence()">
+            </select>
 
-                <label class="field-label" for="select-rame-origin">Gare de la rame (embarquement) :</label>
-                <select id="select-rame-origin" class="field-input">
-                    <option value="">-- Choisissez la gare actuelle de la rame --</option>
-                </select>
+        <label class="field-label" for="select-station-arr">Gare d'arrivée :</label>
+        <select id="select-station-arr" class="field-input">
+            </select>
 
-                <div class="station-choice-line">
-                    <strong>Départ :</strong> <span id="lbl-depart" style="color: #e74c3c;">Cliquez sur une gare</span>
-                </div>
-                <div class="station-choice-line">
-                    <strong>Arrivée :</strong> <span id="lbl-arrivee" style="color: #e74c3c;">Cliquez sur une gare</span>
-                </div>
+        <label class="field-label" for="select-service-type">Type de desserte :</label>
+        <select id="select-service-type" class="field-input">
+            <option value="direct">⚡ Direct (Sans arrêt intermédiaire)</option>
+            <option value="express">🚆 Express (Gares principales uniquement)</option>
+            <option value="omnibus" selected>🚉 Omnibus (Toutes gares)</option>
+        </select>
 
-                <div id="intermediate-stops-box" class="intermediate-stops-box" style="display:none;">
-                    <label class="field-label">Gares intermédiaires suggérées :</label>
-                    <div id="intermediate-stops-hint" class="small-hint">Sélectionnez les arrêts utiles pour cette liaison.</div>
-                    <div id="intermediate-stops-list" class="intermediate-stops-list"></div>
-                </div>
+        <div id="route-feedback" class="route-feedback" aria-live="polite"></div>
 
-                <label class="field-label" for="time-depart">Heure de départ :</label>
-                <input type="time" id="time-depart" class="field-input">
-
-                <div class="eta-assumptions" title="Calcul ETA avec phases d'accélération/décélération et temps d'arrêt intermédiaire.">
-                    Hypothèses ETA: arrêt 45 s / station intermédiaire • accélération 0,55 m/s² • décélération 0,65 m/s²
-                </div>
-
-                <button class="action-btn success" style="width: 100%;" onclick="planifierTrajet()">Valider l'itinéraire</button>
-                <div id="route-feedback" class="route-feedback" aria-live="polite"></div>
-            </div>
-
-            <h4 style="color: #2c3e50;">Circulations Actives</h4>
-            <div id="active-routes-list" class="active-routes-list">
-                <p style="color: #7f8c8d; font-style: italic;">Aucun train en circulation.</p>
-            </div>
+        <div class="eta-assumptions">
+            ⚙️ <strong>Règles de ligne :</strong><br>
+            • Rebroussement hors-gare : <strong>Interdit</strong><br>
+            • Malus rebroussement en gare : <strong>+6 min</strong>
         </div>
+
+        <button class="action-btn success" style="width: 100%; font-size: 1em; padding: 12px;" onclick="planifierTrajet()">
+            🚀 Valider & Faire partir le train
+        </button>
+    </div>
+
+    <h4>Circulations Actives</h4>
+    <div id="active-routes-list" class="active-routes-list">
+        <p style="color: #64748b; font-style: italic;">Aucun train en circulation.</p>
+    </div>
+</div>
 
         <!-- La Carte Interactive -->
         <div class="panel rail-panel map-panel">
