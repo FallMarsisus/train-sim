@@ -635,3 +635,101 @@ nav {
     border: 1px solid #6EE7B7;
     border-left: 5px solid #10B981;
 }
+
+.custom-station-pin {
+    background: transparent;
+    border: none;
+}
+
+.station-dot {
+    width: 10px;
+    height: 10px;
+    background: #0066CC;
+    border: 2px solid #FFFFFF;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.station-dot:hover {
+    transform: scale(1.4);
+    background: #E63946;
+}
+
+.line-plan-box {
+    background: var(--gpe-surface);
+    border: 1px solid var(--gpe-border);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.line-plan-hint {
+    font-size: 0.82em;
+    color: var(--gpe-text-muted);
+    margin: 0 0 8px 0;
+}
+.line-plan-track {
+    overflow-x: auto;
+    padding: 24px 10px 10px 10px;
+}
+.line-plan-inner {
+    display: inline-flex;
+    position: relative;
+    padding: 0 20px;
+}
+.line-plan-inner::before {
+    content: '';
+    position: absolute;
+    top: 9px;
+    left: 20px;
+    right: 20px;
+    height: 3px;
+    background: var(--gpe-blue);
+    z-index: 0;
+}
+.line-plan-stop {
+    flex: 0 0 auto;
+    width: 76px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    z-index: 1;
+}
+.line-plan-stop.endpoint { cursor: default; }
+.stop-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--gpe-blue);
+    border: 3px solid #FFFFFF;
+    box-shadow: 0 0 0 2px var(--gpe-blue);
+    transition: all 0.2s ease;
+}
+.line-plan-stop.endpoint .stop-dot {
+    width: 22px; height: 22px;
+    background: var(--gpe-navy);
+    box-shadow: 0 0 0 2px var(--gpe-navy);
+}
+.line-plan-stop.skipped .stop-dot {
+    background: #FFFFFF;
+    box-shadow: 0 0 0 2px #94A3B8;
+}
+.line-plan-stop:hover:not(.endpoint) .stop-dot { transform: scale(1.25); }
+.stop-label {
+    margin-top: 8px;
+    font-size: 0.7em;
+    text-align: center;
+    font-weight: 600;
+    color: var(--gpe-text-main);
+    line-height: 1.2;
+}
+.line-plan-stop.skipped .stop-label {
+    color: #94A3B8;
+    text-decoration: line-through;
+    font-weight: 500;
+}
+.line-plan-stop.endpoint .stop-label { color: var(--gpe-navy); font-weight: 700; }

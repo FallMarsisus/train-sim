@@ -114,19 +114,27 @@
 
         <h4>2. Trajet & Services</h4>
         <label class="field-label" for="select-station-dep">Gare de départ :</label>
-        <select id="select-station-dep" class="field-input" onchange="checkStationCoherence()">
+        <select id="select-station-dep" class="field-input" onchange="onStationSelectChange()">
             </select>
 
         <label class="field-label" for="select-station-arr">Gare d'arrivée :</label>
-        <select id="select-station-arr" class="field-input">
+        <select id="select-station-arr" class="field-input"onchange="onStationSelectChange()">
             </select>
 
         <label class="field-label" for="select-service-type">Type de desserte :</label>
-        <select id="select-service-type" class="field-input">
-            <option value="direct">⚡ Direct (Sans arrêt intermédiaire)</option>
-            <option value="express">🚆 Express (Gares principales uniquement)</option>
-            <option value="omnibus" selected>🚉 Omnibus (Toutes gares)</option>
-        </select>
+        <select id="select-service-type" class="field-input" onchange="applyServiceTypePreset(this.value)">
+    <option value="direct">⚡ Direct (Sans arrêt intermédiaire)</option>
+    <option value="express">🚆 Express (Gares principales uniquement)</option>
+    <option value="omnibus" selected>🚉 Omnibus (Toutes gares)</option>
+</select>
+
+<!-- NOUVEAU : Plan de ligne interactif -->
+<div id="line-plan-box" class="line-plan-box" style="display:none;">
+    <h4 style="margin-top:0; border:none; padding-bottom:6px;">3. Gares desservies</h4>
+    <p class="line-plan-hint" id="line-plan-hint"></p>
+    <div class="line-plan-track" id="line-plan-track"></div>
+</div>
+
 
         <div id="route-feedback" class="route-feedback" aria-live="polite"></div>
 
@@ -164,7 +172,15 @@
 
     </div>
 
-    <script src="script.js"></script>
+    <script src="data.js"></script>
+    <script src="parse.js"></script>
+    <script src="persistence.js"></script>
+    <script src="shop.js"></script>
+    <script src="inventory.js"></script>
+    <script src="ui.js"></script>
+    <script src="map_and_routes.js"></script>
+    <script src="simulation.js"></script>
+    <script src="init.js"></script>
     <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>
