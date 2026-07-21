@@ -1401,7 +1401,7 @@ function refreshRouteMapLayers() {
     routesLayer.clearLayers();
     gameState.activeRoutes.forEach(route => {
         if (!Array.isArray(route.path) || route.path.length < 2) return;
-        L.polyline(route.path, { color: '#e74c3c', weight: 4, opacity: 0.85 }).addTo(routesLayer);
+        L.polyline(route.path, { color: '#E63946', weight: 4, opacity: 0.85 }).addTo(routesLayer);
     });
 }
 
